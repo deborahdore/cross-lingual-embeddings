@@ -32,6 +32,7 @@ def align_dataset(fr_file: str, eng_fr_file: str, it_file: str, eng_it_file: str
 		csv_out.writerows(joined_sentences)
 
 	out.close()
+	logger.info(f"[align_dataset] aligned file saved to {aligned_file}")
 
 
 def nlp_pipeline(corpus: pd.Series) -> pd.Series:
@@ -78,10 +79,11 @@ def seq2idx(corpus: [], vocab: []) -> []:
 
 
 def pad_sequence(vectorized: [], maximum_len: int) -> []:
+	logger.info(f"[pad_sequence] pad sequence with max length {maximum_len}")
+
 	seq_lengths = list(map(len, vectorized))
 	padded_sequences = []
 
-	logger.info("[pad_sequence] pad sequence")
 	for seq, seqlen in zip(vectorized, seq_lengths):
 		padded_seq = seq + [0] * (maximum_len - seqlen)
 		padded_sequences.append(padded_seq)
@@ -89,9 +91,12 @@ def pad_sequence(vectorized: [], maximum_len: int) -> []:
 	return padded_sequences
 
 
-def process_dataset(aligned_file, processed_file, vocab_file, model_config_file) -> tuple[pd.DataFrame, [], []]:
+def process_dataset(aligned_file, processed_file, vocab_file, model_config_file, plot_file) -> tuple[
+	pd.DataFrame, [], []]:
 	logger.info("[process_dataset] processing dataset")
-	original_corpus = read_file_to_df(aligned_file).sample(n=100)
+	original_corpus = read_file_to_df(aligned_file).sample(frac=0.4)
+
+	eda(original_corpus, plot_file)
 
 	french = nlp_pipeline(original_corpus['french'])
 	italian = nlp_pipeline(original_corpus['italian'])
@@ -142,15 +147,16 @@ def process_dataset(aligned_file, processed_file, vocab_file, model_config_file)
 def get_sentence_in_natural_language(sentence: torch.Tensor, vocab: []) -> []:
 	s = ""
 	for idx in sentence[0].tolist():
-		if idx < 1:
+		item_idx = int(idx * len(vocab))
+		if item_idx < 1:
 			continue
-		s += f" {vocab[int(idx)]}"
+		s += f" {vocab[item_idx]}"
 
 	return s
 
 
 def eda(corpus: pd.DataFrame, plot_file: str) -> None:
-	logger.info(f"[eda] initial dataset is composed of {len(corpus)} sentences")  # 1.665.523
+	logger.info(f"[eda] corpus is composed of {len(corpus)} sentences")  # 1.665.523
 
 	corpus = corpus.reset_index(drop=True, allow_duplicates=False)
 

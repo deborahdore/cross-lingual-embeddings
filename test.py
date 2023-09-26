@@ -116,8 +116,8 @@ def visualize_latent_space(dataset: pd.DataFrame, vocab_it: [], vocab_fr: [], mo
 
 	for i, (sent_fr, sent_it, _) in enumerate(loader):
 		# Extract the embeddings from the latent space
-		embedding_fr = latent_space(encoder_fr(sent_fr.long()))
-		embedding_it = latent_space(encoder_it(sent_it.long()))
+		embedding_fr = latent_space(encoder_fr(sent_fr))
+		embedding_it = latent_space(encoder_it(sent_it))
 
 		points.extend(embedding_fr.detach().numpy())
 		points.extend(embedding_it.detach().numpy())
@@ -141,7 +141,7 @@ def visualize_latent_space(dataset: pd.DataFrame, vocab_it: [], vocab_fr: [], mo
 	plt.xlabel("X")
 	plt.ylabel("Y")
 	plt.savefig(plot_file.format(file_name="latent_space_projection"))
-	plt.show()
+	# plt.show()
 	plt.close()
 
 

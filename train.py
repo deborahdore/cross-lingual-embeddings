@@ -1,3 +1,4 @@
+import pandas as pd
 import torch.utils.data
 from matplotlib import pyplot as plt
 from torch.nn import MSELoss
@@ -5,7 +6,7 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
 from config.logger import logger
-from dao import AEDataset
+from dao.AEDataset import AEDataset
 from dao.model import Encoder, LatentSpace, Decoder
 from utils.utils import read_json, save_model
 
@@ -46,7 +47,10 @@ def split_dataset(dataset: AEDataset, batch_size: int) -> [DataLoader, DataLoade
 	return train_loader, val_loader, test_loader
 
 
-def train(dataset: AEDataset, model_config_file: str, model_file: str, plot_file: str) -> DataLoader:
+def train(corpus_4_model_training: pd.DataFrame, model_config_file: str, model_file: str, plot_file: str) -> DataLoader:
+	dataset = AEDataset(corpus_fr=corpus_4_model_training['french'].tolist(),
+						corpus_it=corpus_4_model_training['italian'].tolist())
+
 	config = read_json(model_config_file)
 	logger.info(f"[train] {config}")
 
@@ -57,7 +61,6 @@ def train(dataset: AEDataset, model_config_file: str, model_file: str, plot_file
 	batch_size = config['batch_size']
 	num_epochs = config['num_epochs']
 	lr = config['lr']
-	best_val_loss = float('inf')
 
 	# model parameters
 	len_vocab_fr = config['len_vocab_fr']
@@ -68,7 +71,7 @@ def train(dataset: AEDataset, model_config_file: str, model_file: str, plot_file
 	hidden_lstm_dim = config['hidden_lstm_dim']
 	output_dim = config['output_dim']
 
-	train_loader, val_loader, test_loader = split_dataset(batch_size, dataset)
+	train_loader, val_loader, test_loader = split_dataset(dataset, batch_size)
 
 	# model instantiation
 	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim)
@@ -195,7 +198,7 @@ def train(dataset: AEDataset, model_config_file: str, model_file: str, plot_file
 	plt.legend()
 	plt.grid(True)
 	plt.tight_layout()
-	plt.savefig(plot_file.format("train_val_loss"))
+	plt.savefig(plot_file.format(file_name="train_val_loss"))
 	plt.close()
 
 	# wandb.finish()
