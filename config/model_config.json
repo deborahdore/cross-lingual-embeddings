@@ -1,0 +1,15 @@
+{
+    "len_vocab_fr": 1279,
+    "len_vocab_it": 1297,
+    "embedding_dim": 50,
+    "hidden_dim": 32,
+    "ls_dim": 16,
+    "hidden_lstm_dim": 24,
+    "output_dim": 106,
+    "num_epochs": 25,
+    "batch_size": 64,
+    "lr": 0.008,
+    "patience": 3,
+    "early_stop_counter": 0
+
+}
