@@ -2,8 +2,7 @@
 
 _The goal of this project is to create embeddings for italian and french that are aligned in a shared latent space using an encoder-decoder model_
 
-### **Dataset**
-
+## **Dataset**
 The parallel datasets Italian-English and French-English was obtained from the [_European Parliament Proceedings
 Parallel Corpus 1996-2011_](https://www.statmt.org/europarl/). These dataset were already aligned. <br> To obtain an
 Italian-English Corpus, the Italian-English and the French-English corpus were joined based on their english sentences
