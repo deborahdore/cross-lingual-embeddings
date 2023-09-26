@@ -36,7 +36,7 @@ def align_dataset(fr_file: str, eng_fr_file: str, it_file: str, eng_it_file: str
 
 
 def nlp_pipeline(corpus: pd.Series) -> pd.Series:
-	logger.info("[nlp_pipeline] lower Words")
+	logger.info("[nlp_pipeline] lower words")
 	corpus = corpus.str.lower()
 
 	logger.info("[nlp_pipeline] transform numbers")
@@ -72,10 +72,20 @@ def create_vocabulary(corpus: pd.Series) -> []:
 def seq2idx(corpus: [], vocab: []) -> []:
 	logger.info("[seq2idx] converting words to index")
 	vectorized_seqs = []
+
 	for seq in corpus:
-		vectorized_seqs.append([vocab.index(tok) / len(vocab) for tok in seq.split()])
+		vectorized_seqs.append([vocab.index(tok) for tok in seq.split()])
 
 	return vectorized_seqs
+
+
+def normalize(corpus: [], vocab: []) -> []:
+	logger.info("[normalize] normalize sequence")
+	scaling_factor = 2 / len(vocab)
+	new_corpus = []
+	for seq in corpus:
+		new_corpus.append([(x * scaling_factor) - 1 for x in seq])
+	return new_corpus
 
 
 def pad_sequence(vectorized: [], maximum_len: int) -> []:
@@ -91,12 +101,21 @@ def pad_sequence(vectorized: [], maximum_len: int) -> []:
 	return padded_sequences
 
 
+def count_words(sentence) -> int:
+	words = sentence.split()
+	return len(words)
+
+
 def process_dataset(aligned_file, processed_file, vocab_file, model_config_file, plot_file) -> tuple[
 	pd.DataFrame, [], []]:
 	logger.info("[process_dataset] processing dataset")
-	original_corpus = read_file_to_df(aligned_file).sample(frac=0.4)
+	original_corpus = read_file_to_df(aligned_file).sample(frac=0.3)
+	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop=True)
 
 	eda(original_corpus, plot_file)
+
+	logger.info("[process_dataset] remove outliers")
+	original_corpus = remove_outliers(original_corpus)
 
 	french = nlp_pipeline(original_corpus['french'])
 	italian = nlp_pipeline(original_corpus['italian'])
@@ -109,8 +128,8 @@ def process_dataset(aligned_file, processed_file, vocab_file, model_config_file,
 	write_df_to_file(pd.Series(vocab_fr, name='words'), vocab_file.format(lang="fr"))
 	write_df_to_file(pd.Series(vocab_it, name='words'), vocab_file.format(lang="it"))
 
-	seq2idx_fr = seq2idx(french, vocab_fr)
-	seq2idx_it = seq2idx(italian, vocab_it)
+	seq2idx_fr = normalize(seq2idx(french, vocab_fr), vocab_fr)
+	seq2idx_it = normalize(seq2idx(italian, vocab_it), vocab_it)
 
 	maximum_len = max(len(max(seq2idx_fr, key=len)), len(max(seq2idx_it, key=len)))
 	logger.info(f"[process_dataset] max length of sentences is {maximum_len}")
@@ -142,6 +161,18 @@ def process_dataset(aligned_file, processed_file, vocab_file, model_config_file,
 	write_df_to_file(final_corpus, processed_file)
 
 	return final_corpus, vocab_fr, vocab_it
+
+
+def remove_outliers(df: pd.DataFrame) -> pd.DataFrame:
+	df['french_word_count'] = df['french'].apply(count_words)
+	df['italian_word_count'] = df['italian'].apply(count_words)
+
+	# Filter out rows where either French or Italian sentences have more than 100 words
+	filtered_df = df[(df['french_word_count'] <= 100) & (df['italian_word_count'] <= 100)].copy()
+
+	filtered_df.drop(['french_word_count', 'italian_word_count'], axis=1, inplace=True)
+
+	return filtered_df
 
 
 def get_sentence_in_natural_language(sentence: torch.Tensor, vocab: []) -> []:

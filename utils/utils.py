@@ -2,6 +2,7 @@ import json
 import os
 import tarfile
 import urllib.request
+from typing import Union
 
 import pandas as pd
 import torch
@@ -40,7 +41,7 @@ def read_file_to_df(file: str) -> pd.DataFrame:
 	return df
 
 
-def write_df_to_file(df: pd.DataFrame | pd.Series, file: str) -> None:
+def write_df_to_file(df: Union[pd.DataFrame, pd.Series], file: str) -> None:
 	df.to_csv(file, index=False)
 
 
@@ -57,9 +58,9 @@ def download_from_url(url: str, to_save: str, lang: str) -> None:
 	logger.info(f"[download_from_url] file saved to {to_save}")
 
 
-def save_model(model: [Encoder | Decoder | LatentSpace], file: str) -> None:
+def save_model(model: Union[Encoder, Decoder, LatentSpace], file: str) -> None:
 	torch.save(model.state_dict(), file)
 
 
-def load_model(file: str) -> [Encoder | Decoder | LatentSpace]:
+def load_model(file: str) -> Union[Encoder, Decoder, LatentSpace]:
 	return torch.load(file)

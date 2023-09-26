@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import pandas as pd
 import torch.utils.data
 from matplotlib import pyplot as plt
@@ -31,7 +33,7 @@ def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int
 	return torch.mean(loss)
 
 
-def split_dataset(dataset: AEDataset, batch_size: int) -> [DataLoader, DataLoader, DataLoader]:
+def split_dataset(dataset: AEDataset, batch_size: int) -> Tuple[DataLoader, DataLoader, DataLoader]:
 	train_size = int(0.7 * len(dataset))
 	val_size = int(0.10 * len(dataset))
 	test_size = len(dataset) - train_size - val_size
