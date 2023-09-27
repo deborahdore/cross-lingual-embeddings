@@ -16,6 +16,7 @@ from utils.utils import read_json, load_model
 
 from loguru import logger
 
+
 def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> None:
 	config = read_json(model_config_file)
 	logger.info(f"[test] {config}")

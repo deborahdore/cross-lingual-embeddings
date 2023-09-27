@@ -58,7 +58,7 @@ def train(corpus_4_model_training: pd.DataFrame, model_config_file: str, model_f
 
 	# training parameters
 	patience = config['patience']
-	early_stop_counter = config['early_stop_counter']
+	early_stop_counter = 0
 	best_val_loss = float('inf')
 	batch_size = config['batch_size']
 	num_epochs = config['num_epochs']
