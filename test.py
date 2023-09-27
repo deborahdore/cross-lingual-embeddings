@@ -8,13 +8,13 @@ from torch.utils.data import DataLoader
 from torchtext.data import bleu_score
 from tqdm import tqdm
 
-from config.logger import logger
 from dao.AEDataset import AEDataset
 from dao.model import Encoder, LatentSpace, Decoder
 from train import contrastive_loss
 from utils.processing import get_sentence_in_natural_language
 from utils.utils import read_json, load_model
 
+from loguru import logger
 
 def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> None:
 	config = read_json(model_config_file)

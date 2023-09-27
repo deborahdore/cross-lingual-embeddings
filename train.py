@@ -2,12 +2,12 @@ from typing import Tuple
 
 import pandas as pd
 import torch.utils.data
+from loguru import logger
 from matplotlib import pyplot as plt
 from torch.nn import MSELoss
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
-from config.logger import logger
 from dao.AEDataset import AEDataset
 from dao.model import Encoder, LatentSpace, Decoder
 from utils.utils import read_json, save_model

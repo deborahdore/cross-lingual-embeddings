@@ -6,8 +6,8 @@ import pandas as pd
 import torch
 from matplotlib import pyplot as plt
 
-from config.logger import logger
 from utils.utils import read_file_to_df, write_df_to_file, read_json, write_json
+from loguru import logger
 
 
 def align_dataset(fr_file: str, eng_fr_file: str, it_file: str, eng_it_file: str, aligned_file: str) -> None:
@@ -69,13 +69,14 @@ def create_vocabulary(corpus: pd.Series) -> []:
 	return ['<pad>'] + vocab
 
 
+def vectorize_seq(seq, vocab_lookup):
+	return [vocab_lookup.get(tok, -1) for tok in seq.split()]
+
+
 def seq2idx(corpus: [], vocab: []) -> []:
 	logger.info("[seq2idx] converting words to index")
-	vectorized_seqs = []
-
-	for seq in corpus:
-		vectorized_seqs.append([vocab.index(tok) for tok in seq.split()])
-
+	vocab_lookup = {tok: idx for idx, tok in enumerate(vocab)}
+	vectorized_seqs = [vectorize_seq(seq, vocab_lookup) for seq in corpus]
 	return vectorized_seqs
 
 
@@ -108,8 +109,8 @@ def count_words(sentence) -> int:
 
 def process_dataset(aligned_file, processed_file, vocab_file, model_config_file, plot_file) -> tuple[
 	pd.DataFrame, [], []]:
-	logger.info("[process_dataset] processing dataset")
-	original_corpus = read_file_to_df(aligned_file).sample(frac=0.3)
+	logger.info("[process_dataset] processing dataset (0.5 sampled)")
+	original_corpus = read_file_to_df(aligned_file).sample(frac=0.5)
 	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop=True)
 
 	eda(original_corpus, plot_file)
@@ -167,8 +168,8 @@ def remove_outliers(df: pd.DataFrame) -> pd.DataFrame:
 	df['french_word_count'] = df['french'].apply(count_words)
 	df['italian_word_count'] = df['italian'].apply(count_words)
 
-	# Filter out rows where either French or Italian sentences have more than 100 words
-	filtered_df = df[(df['french_word_count'] <= 100) & (df['italian_word_count'] <= 100)].copy()
+	# Filter out rows where either French or Italian sentences have more than 200 words
+	filtered_df = df[(df['french_word_count'] <= 200) & (df['italian_word_count'] <= 200)].copy()
 
 	filtered_df.drop(['french_word_count', 'italian_word_count'], axis=1, inplace=True)
 

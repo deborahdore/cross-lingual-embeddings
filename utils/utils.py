@@ -7,8 +7,8 @@ from typing import Union
 import pandas as pd
 import torch
 
-from config.logger import logger
 from dao.model import Decoder, Encoder, LatentSpace
+from loguru import logger
 
 
 def read_json(json_file_name: str) -> json:

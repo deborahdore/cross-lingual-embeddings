@@ -1,15 +1,11 @@
 import ast
 import sys
 
-from sklearn.model_selection import train_test_split
-
-from config.logger import logger
 from config.path import aligned_file, processed_file, \
-	vocab_file, model_config_file, model_file, plot_file, lang_file, eng_lang_file
-from test import test, visualize_latent_space, translate
-from train import train
-from utils.processing import process_dataset, align_dataset
-from utils.utils import read_file_to_df, read_file
+	vocab_file, model_config_file, plot_file
+from utils.processing import process_dataset
+from utils.utils import read_file_to_df
+from loguru import logger
 
 if __name__ == '__main__':
 	if len(sys.argv) < 2:
@@ -44,10 +40,10 @@ if __name__ == '__main__':
 
 	print("END")
 
-	# corpus_4_model_training, corpus_4_testing = train_test_split(corpus, test_size=0.1, random_state=42)
-	# corpus_4_model_training = corpus_4_model_training.reset_index(drop=True)
-	# corpus_4_testing = corpus_4_testing.reset_index(drop=True)
-	#
-	# test(train(corpus_4_model_training, model_config_file, model_file, plot_file), model_config_file, model_file)
-	# visualize_latent_space(corpus_4_testing, vocab_it, vocab_fr, model_config_file, model_file, plot_file)
-	# translate(corpus_4_testing, vocab_it, vocab_fr, model_config_file, model_file)
+# corpus_4_model_training, corpus_4_testing = train_test_split(corpus, test_size=0.1, random_state=42)
+# corpus_4_model_training = corpus_4_model_training.reset_index(drop=True)
+# corpus_4_testing = corpus_4_testing.reset_index(drop=True)
+#
+# test(train(corpus_4_model_training, model_config_file, model_file, plot_file), model_config_file, model_file)
+# visualize_latent_space(corpus_4_testing, vocab_it, vocab_fr, model_config_file, model_file, plot_file)
+# translate(corpus_4_testing, vocab_it, vocab_fr, model_config_file, model_file)
