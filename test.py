@@ -18,6 +18,9 @@ from loguru import logger
 
 
 def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> None:
+	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+	logger.info(f"[train] device: {device}")
+
 	config = read_json(model_config_file)
 	logger.info(f"[test] {config}")
 
@@ -33,18 +36,23 @@ def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> No
 	# model loading
 	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim)
 	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
+	encoder_fr = encoder_fr.to(device)
 
 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim)
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
+	encoder_it = encoder_it.to(device)
 
 	latent_space = LatentSpace(hidden_dim, ls_dim)
 	latent_space.load_state_dict(load_model(model_file.format(type='latent_space')))
+	latent_space.to(device)
 
 	decoder_fr = Decoder(ls_dim, hidden_lstm_dim, output_dim)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
+	decoder_fr.to(device)
 
 	decoder_it = Decoder(ls_dim, hidden_lstm_dim, output_dim)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
+	decoder_it.to(device)
 
 	encoder_fr.eval()
 	encoder_it.eval()
@@ -60,6 +68,10 @@ def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> No
 	with tqdm(total=len(test_loader), desc="Testing", unit="batch") as pbar:
 		for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
 			with torch.no_grad():
+				input_fr = input_fr.to(device)
+				input_it = input_it.to(device)
+				label = label.to(device)
+
 				embedding_fr = latent_space(encoder_fr(input_fr))
 				embedding_it = latent_space(encoder_it(input_it))
 
@@ -79,7 +91,7 @@ def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> No
 	logger.info(f"[test] Average Test Loss: {avg_test_loss:.20f}")
 
 
-def visualize_latent_space(dataset: pd.DataFrame, vocab_it: [], vocab_fr: [], model_config_file: str, model_file: str,
+def visualize_latent_space(dataset: pd.DataFrame, embedding_model: str, model_config_file: str, model_file: str,
 						   plot_file: str) -> None:
 	config = read_json(model_config_file)
 	logger.info(f"[visualize_latent_space] {config}")
@@ -123,8 +135,8 @@ def visualize_latent_space(dataset: pd.DataFrame, vocab_it: [], vocab_fr: [], mo
 		points.extend(embedding_fr.detach().numpy())
 		points.extend(embedding_it.detach().numpy())
 
-		text.append(get_sentence_in_natural_language(sent_fr, vocab_fr))
-		text.append(get_sentence_in_natural_language(sent_it, vocab_it))
+		text.append(get_sentence_in_natural_language(sent_fr, embedding_model, "fr"))
+		text.append(get_sentence_in_natural_language(sent_it, embedding_model, "it"))
 
 		colors.extend([i] * 2)
 

@@ -50,6 +50,9 @@ def split_dataset(dataset: AEDataset, batch_size: int) -> Tuple[DataLoader, Data
 
 
 def train(corpus_4_model_training: pd.DataFrame, model_config_file: str, model_file: str, plot_file: str) -> DataLoader:
+	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+	logger.info(f"[train] device: {device}")
+
 	dataset = AEDataset(corpus_fr=corpus_4_model_training['french'].tolist(),
 						corpus_it=corpus_4_model_training['italian'].tolist())
 
@@ -76,13 +79,13 @@ def train(corpus_4_model_training: pd.DataFrame, model_config_file: str, model_f
 	train_loader, val_loader, test_loader = split_dataset(dataset, batch_size)
 
 	# model instantiation
-	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim)
-	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim)
+	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim).to(device)
+	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim).to(device)
 
-	latent_space = LatentSpace(hidden_dim, ls_dim)
+	latent_space = LatentSpace(hidden_dim, ls_dim).to(device)
 
-	decoder_fr = Decoder(ls_dim, hidden_lstm_dim, output_dim)
-	decoder_it = Decoder(ls_dim, hidden_lstm_dim, output_dim)
+	decoder_fr = Decoder(ls_dim, hidden_lstm_dim, output_dim).to(device)
+	decoder_it = Decoder(ls_dim, hidden_lstm_dim, output_dim).to(device)
 
 	optimizer = torch.optim.Adam(
 		list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(latent_space.parameters()) + list(
@@ -109,6 +112,10 @@ def train(corpus_4_model_training: pd.DataFrame, model_config_file: str, model_f
 
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
+				input_fr = input_fr.to(device)
+				input_it = input_it.to(device)
+				label = label.to(device)
+
 				optimizer.zero_grad()
 
 				embedding_fr = latent_space(encoder_fr(input_fr))
@@ -151,6 +158,10 @@ def train(corpus_4_model_training: pd.DataFrame, model_config_file: str, model_f
 
 		with torch.no_grad():
 			for (input_fr, input_it, label) in val_loader:
+				input_fr = input_fr.to(device)
+				input_it = input_it.to(device)
+				label = label.to(device)
+
 				embedding_fr = latent_space(encoder_fr(input_fr))
 				embedding_it = latent_space(encoder_it(input_it))
 

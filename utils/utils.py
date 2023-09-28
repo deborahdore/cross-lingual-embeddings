@@ -63,4 +63,5 @@ def save_model(model: Union[Encoder, Decoder, LatentSpace], file: str) -> None:
 
 
 def load_model(file: str) -> Union[Encoder, Decoder, LatentSpace]:
-	return torch.load(file)
+	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+	return torch.load(file, map_location=device)

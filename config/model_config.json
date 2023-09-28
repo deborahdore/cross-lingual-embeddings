@@ -1,13 +1,13 @@
 {
-    "len_vocab_fr": 118741,
-    "len_vocab_it": 141866,
-    "embedding_dim": 150,
-    "hidden_dim": 64,
-    "ls_dim": 32,
-    "hidden_lstm_dim": 64,
-    "output_dim": 200,
-    "num_epochs": 25,
-    "batch_size": 64,
-    "lr": 0.008,
-    "patience": 3
+  "len_vocab_fr": 8236,
+  "len_vocab_it": 8346,
+  "embedding_dim": 100,
+  "hidden_dim": 32,
+  "ls_dim": 8,
+  "hidden_lstm_dim": 32,
+  "output_dim": 242,
+  "num_epochs": 25,
+  "batch_size": 32,
+  "lr": 0.01,
+  "patience": 3
 }
