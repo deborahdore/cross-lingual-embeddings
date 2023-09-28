@@ -22,14 +22,55 @@ number of words (> 1 million) therefore, after different trials, it was decided 
 is a subword tokenization technique that breaks down text into smaller subword units, making it especially useful for
 handling languages with complex morphologies and handling out-of-vocabulary words.
 
+<img src="plot/fr_it_sentences_length.svg">
+
 ## **MODELS**
 
 Trained models are available in this [folder](models)
 
-* Italian encoder: [model](models/encoder_it.pt)
-* French encoder: [model](models/encoder_fr.pt)
-* Italian decoder: [model](models/decoder_it.pt)
-* French decoder: [model](models/decoder_fr.pt)
-* Latent Space Model: [model](models/latent_space.pt)
+<div style="display: flex; justify-content: space-between;">
+  <div style="flex: 1;">
+    <ul>
+      <li><a href="models/encoder_it.pt">Italian encoder</a></li>
+      <li><a href="models/encoder_fr.pt">French encoder</a></li>
+      <li><a href="models/decoder_it.pt">Italian decoder</a></li>
+      <li><a href="models/decoder_fr.pt">French decoder</a></li>
+      <li><a href="models/latent_space.pt">Latent Space Model</a></li>
+    </ul>
+  </div>
+  <div style="flex: 1;">
+    <img src="plot/architecture.svg" alt="Architecture">
+  </div>
+</div>
 
-<figure style="text-align: center;"><img src="plot/architecture.svg" alt="Architecture of the models"><figcaption>Architecture</figcaption></figure>
+## **REPLICABILITY**
+
+Each experiment was conducted on a single machine by running the [main](main.py) script and specifying whether to
+process the dataset or not:
+
+`python main.py True  # process dataset` <br>
+`python main.py False # skip processing step`
+
+### Environment
+- Python 3.9
+- Python dependencies: [requirements.txt](requirements.txt)
+
+### Data Processing Script
+- [utils/processing.py](utils/processing.py) - processing functions
+- [utils/utils.py](utils/utils.py) - utils functions
+- [dao/AEDataset.py](dao/AEDataset.py) - dataset class
+- [embedder](embedder) tokenizers for italian and english using BPE encoding
+
+### Training & Testing Script
+- [train.py](train.py) - training loop
+- [test.py](test.py) - evaluation loop
+- [dao/model.py](dao/model.py) - model skeleton
+
+### Results
+- [plot](plot) - visual results
+
+
+## **LATENT SPACE PROJECTION**
+<img src="plot/latent_space_projection.svg">
+
+
