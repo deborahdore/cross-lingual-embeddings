@@ -3,6 +3,32 @@
 _The goal of this project is to create embeddings for italian and french that are aligned in a shared latent space using
 an encoder-decoder model_
 
+## **REPLICABILITY**
+
+Each experiment was conducted on a single machine by running the [main](main.py) script and specifying whether to
+process the dataset or not:
+
+`python main.py True  # process dataset` <br>
+`python main.py False # skip processing step`
+
+### Environment
+- Python 3.9
+- Python dependencies: [requirements.txt](requirements.txt)
+
+### Data Processing Script
+- [utils/processing.py](utils/processing.py) - processing functions
+- [utils/utils.py](utils/utils.py) - utils functions
+- [dao/AEDataset.py](dao/AEDataset.py) - dataset class
+- [embedder](embedder) tokenizers for italian and english using BPE encoding
+
+### Training & Testing Script
+- [train.py](train.py) - training loop
+- [test.py](test.py) - evaluation loop
+- [dao/model.py](dao/model.py) - model skeleton
+
+### Results
+- [plot](plot) - visual results
+
 ## **DATASET**
 
 The parallel datasets Italian-English and French-English was obtained from the [_European Parliament Proceedings
@@ -42,33 +68,6 @@ Trained models are available in this [folder](models)
     <img src="plot/architecture.svg" alt="Architecture">
   </div>
 </div>
-
-## **REPLICABILITY**
-
-Each experiment was conducted on a single machine by running the [main](main.py) script and specifying whether to
-process the dataset or not:
-
-`python main.py True  # process dataset` <br>
-`python main.py False # skip processing step`
-
-### Environment
-- Python 3.9
-- Python dependencies: [requirements.txt](requirements.txt)
-
-### Data Processing Script
-- [utils/processing.py](utils/processing.py) - processing functions
-- [utils/utils.py](utils/utils.py) - utils functions
-- [dao/AEDataset.py](dao/AEDataset.py) - dataset class
-- [embedder](embedder) tokenizers for italian and english using BPE encoding
-
-### Training & Testing Script
-- [train.py](train.py) - training loop
-- [test.py](test.py) - evaluation loop
-- [dao/model.py](dao/model.py) - model skeleton
-
-### Results
-- [plot](plot) - visual results
-
 
 ## **LATENT SPACE PROJECTION**
 <img src="plot/latent_space_projection.svg">
