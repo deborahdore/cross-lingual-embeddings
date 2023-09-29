@@ -202,7 +202,7 @@ def translate(dataset: pd.DataFrame, vocab_it: [], vocab_fr: [], model_config_fi
 		with torch.no_grad():
 			output_it = decoder_it(latent_space(encoder_fr(sentence_fr)))
 
-			candidate_corpus.append(get_sentence_in_natural_language(output_it, vocab_it))
-			references_corpus.append(get_sentence_in_natural_language(sentence_it, vocab_it))
+			candidate_corpus.append(get_sentence_in_natural_language(output_it, vocab_it, "it"))
+			references_corpus.append(get_sentence_in_natural_language(sentence_it, vocab_it, "it"))
 
 	logger.info(f'Bleu score: {bleu_score(candidate_corpus=candidate_corpus, references_corpus=references_corpus)}')

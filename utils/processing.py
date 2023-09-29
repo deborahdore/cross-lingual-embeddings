@@ -1,17 +1,17 @@
 import csv
 import re
 import string
-from tokenizers import Tokenizer
 
 import numpy as np
 import pandas as pd
 import torch
-from matplotlib import pyplot as plt
-from tokenizers.implementations import ByteLevelBPETokenizer
-
-from utils.utils import read_file_to_df, write_df_to_file, read_json, write_json
 from loguru import logger
+from matplotlib import pyplot as plt
+from tokenizers import Tokenizer
 
+from utils.utils import read_file_to_df, read_json, write_df_to_file, write_json
+from gensim.models import Word2Vec
+import nltk
 
 def align_dataset(fr_file: str, eng_fr_file: str, it_file: str, eng_it_file: str, aligned_file: str) -> None:
 	logger.info("[align_dataset] creating aligned file")
@@ -27,7 +27,7 @@ def align_dataset(fr_file: str, eng_fr_file: str, it_file: str, eng_it_file: str
 	it_mapping = {en: it for it, en in zip(it_sentences, it_en_sentences)}
 
 	joined_sentences = [(fr_mapping[en], it_mapping[en]) for en in fr_en_sentences if
-						en in fr_mapping and en in it_mapping]
+	                    en in fr_mapping and en in it_mapping]
 
 	with open(aligned_file, 'w') as out:
 		csv_out = csv.writer(out)
@@ -71,30 +71,28 @@ def create_vocabulary(corpus: pd.Series) -> []:
 	return sorted(set(vocab))
 
 
-def seq2idx(corpus: [], embedding_model: str, language: str) -> []:
-	logger.info("[seq2idx] converting words to embeddings using ELMO")
-	tokenizer = Tokenizer.from_file(embedding_model.format(lang=language))
-	vectorized_seqs = [tokenizer.encode(seq).ids for seq in corpus]
+def seq2idx(corpus: [], embedding_model: str) -> []:
+	logger.info("[seq2idx] converting words to embeddings using Word2Vec")
+	model = Word2Vec.load(embedding_model)
+	vectorized_seqs = [np.squeeze([model.wv[word] for word in sentence.split()]) for sentence in corpus]
 	return vectorized_seqs
 
 
-# def normalize(corpus: [], vocab: []) -> []:
-#     logger.info("[normalize] normalize sequence")
-#     scaling_factor = 2 / len(vocab)
-#     new_corpus = []
-#     for seq in corpus:
-#         new_corpus.append([(x * scaling_factor) - 1 for x in seq])
-#     return new_corpus
-
+# def min_max_scaling(nested_list):
+#     flattened_list = list(chain(*nested_list))
+#     min_val = min(flattened_list)
+#     max_val = max(flattened_list)
+#     scaled_embeddings = [(x - min_val) / (max_val - min_val) for x in nested_list]
+#     return scaled_embeddings
 
 def pad_sequence(vectorized: [], maximum_len: int) -> []:
 	logger.info(f"[pad_sequence] pad sequence with max length {maximum_len}")
 
-	seq_lengths = list(map(len, vectorized))
+	seq_lengths = list(map(lambda x: x.shape[0], vectorized))
 	padded_sequences = []
 
 	for seq, seqlen in zip(vectorized, seq_lengths):
-		padded_seq = seq + [0] * (maximum_len - seqlen)
+		padded_seq = seq.tolist()  + [0] * (maximum_len - seqlen)
 		padded_sequences.append(padded_seq)
 
 	return padded_sequences
@@ -105,11 +103,13 @@ def count_words(sentence) -> int:
 	return len(words)
 
 
-def process_dataset(aligned_file: str, processed_file: str, vocab_file: str, model_config_file: str, plot_file: str,
-					embedding_model: str) -> tuple[pd.DataFrame, [], []]:
-	logger.info("[process_dataset] processing dataset (0.5 sampled)")
-	original_corpus = read_file_to_df(aligned_file).sample(frac=0.5)
-	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop=True)
+def process_dataset(
+		aligned_file: str, processed_file: str, vocab_file: str, model_config_file: str, plot_file: str,
+		embedding_model: str
+		) -> tuple[pd.DataFrame, [], []]:
+	logger.info("[process_dataset] processing dataset (0.3 sampled)")
+	original_corpus = read_file_to_df(aligned_file).sample(n=200)#.sample(frac = 0.3)
+	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop = True)
 
 	eda(original_corpus, plot_file)
 
@@ -124,17 +124,18 @@ def process_dataset(aligned_file: str, processed_file: str, vocab_file: str, mod
 	vocab_it = create_vocabulary(italian)
 
 	logger.info("[process_dataset] writing vocabulary to file")
-	write_df_to_file(pd.Series(vocab_fr, name='words'), vocab_file.format(lang="fr"))
-	write_df_to_file(pd.Series(vocab_it, name='words'), vocab_file.format(lang="it"))
+	write_df_to_file(pd.Series(vocab_fr, name = 'words'), vocab_file.format(lang = "fr"))
+	write_df_to_file(pd.Series(vocab_it, name = 'words'), vocab_file.format(lang = "it"))
 
-	logger.info("[process_dataset] train embedder")
-	train_embedder(embedding_model, vocab_file, "fr")
-	train_embedder(embedding_model, vocab_file, "it")
+	logger.info("[process_dataset] train tokenizer")
+	train_tokenizer(french, embedding_model.format(lang="fr"))
+	train_tokenizer(italian, embedding_model.format(lang="it"))
 
-	seq2idx_fr = seq2idx(french, embedding_model, "fr")
-	seq2idx_it = seq2idx(italian, embedding_model, "it")
+	seq2idx_fr = seq2idx(french, embedding_model.format(lang="fr"))
+	seq2idx_it = seq2idx(italian, embedding_model.format(lang="it"))
 
-	maximum_len = max(len(max(seq2idx_fr, key=len)), len(max(seq2idx_it, key=len)))
+	maximum_len = max(len(max(seq2idx_fr, key = lambda x: x.shape)),
+	                  len(max(seq2idx_it, key = lambda x: x.shape)))
 	logger.info(f"[process_dataset] max length of sentences is {maximum_len}")
 
 	logger.info("[process_dataset] modify model configurations")
@@ -159,35 +160,34 @@ def process_dataset(aligned_file: str, processed_file: str, vocab_file: str, mod
 			seq2idx_fr_pad_new.append(seq_fr)
 
 	final_corpus = pd.DataFrame({'french': pd.Series(seq2idx_fr_pad_new), 'italian': pd.Series(seq2idx_it_pad_new)})
-	final_corpus = final_corpus.dropna().reset_index(drop=True)
+	final_corpus = final_corpus.dropna().reset_index(drop = True)
 
 	write_df_to_file(final_corpus, processed_file)
 
 	return final_corpus, vocab_fr, vocab_it
 
 
-def train_embedder(embedding_model: str, vocab: [], lang: str) -> None:
-	tokenizer = ByteLevelBPETokenizer()
-	tokenizer.train(vocab.format(lang=lang),
-					vocab_size=10000,
-					special_tokens=["[PAD]", "[CLS]", "[SEP]", "[MASK]", "[UNK]"])
-	tokenizer.save(embedding_model.format(lang=lang))
+def train_tokenizer(corpus : [], embedding_model:str) -> None:
+	nltk.download('punkt')
+	# Define and train the Word2Vec model
+	model = Word2Vec([s.split() for s in corpus], vector_size = 1, window = 5, min_count = 1, sg = 0)
+	model.save(embedding_model)
 
 
 def remove_outliers(df: pd.DataFrame) -> pd.DataFrame:
 	df['french_word_count'] = df['french'].apply(count_words)
 	df['italian_word_count'] = df['italian'].apply(count_words)
 
-	# Filter out rows where either French or Italian sentences have more than 200 words
+	# Filter out rows where either French or Italian sentences have more than 100 words
 	filtered_df = df[(df['french_word_count'] <= 100) & (df['italian_word_count'] <= 100)].copy()
 
-	filtered_df.drop(['french_word_count', 'italian_word_count'], axis=1, inplace=True)
+	filtered_df.drop(['french_word_count', 'italian_word_count'], axis = 1, inplace = True)
 
 	return filtered_df
 
 
 def get_sentence_in_natural_language(sentence: torch.Tensor, embedding_model: str, language: str) -> []:
-	tokenizer = Tokenizer.from_file(embedding_model.format(lang=language))
+	tokenizer = Tokenizer.from_file(embedding_model.format(lang = language))
 	decoded_text = tokenizer.decode([int(x) for x in sentence.data[0].tolist()])
 	return decoded_text
 
@@ -195,7 +195,7 @@ def get_sentence_in_natural_language(sentence: torch.Tensor, embedding_model: st
 def eda(corpus: pd.DataFrame, plot_file: str) -> None:
 	logger.info(f"[eda] corpus is composed of {len(corpus)} sentences")  # 1.665.523
 
-	corpus = corpus.reset_index(drop=True, allow_duplicates=False)
+	corpus = corpus.reset_index(drop = True, allow_duplicates = False)
 
 	list_lengths_fr = corpus['french'].apply(lambda x: len(x.split()))
 	list_lengths_it = corpus['italian'].apply(lambda x: len(x.split()))
@@ -203,5 +203,5 @@ def eda(corpus: pd.DataFrame, plot_file: str) -> None:
 	pd.DataFrame({'italian': list_lengths_it, 'french': list_lengths_fr}).boxplot()
 	plt.title('french - italian Sentences Length distribution')
 	plt.tight_layout()
-	plt.savefig(plot_file.format(file_name="fr_it_sentences_length"))
+	plt.savefig(plot_file.format(file_name = "fr_it_sentences_length"))
 	plt.close()

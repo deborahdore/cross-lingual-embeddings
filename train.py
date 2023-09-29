@@ -130,9 +130,9 @@ def train(corpus_4_model_training: pd.DataFrame, model_config_file: str, model_f
 
 				loss.backward()
 
-				max_grad_norm = 1.0
-				torch.nn.utils.clip_grad_norm_(list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
-					decoder_fr.parameters()) + list(decoder_it.parameters()), max_grad_norm)
+				# max_grad_norm = 1.0
+				# torch.nn.utils.clip_grad_norm_(list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
+				# 	decoder_fr.parameters()) + list(decoder_it.parameters()), max_grad_norm)
 
 				optimizer.step()
 

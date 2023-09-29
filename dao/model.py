@@ -18,13 +18,12 @@ class LatentSpace(nn.Module):
 class Encoder(nn.Module):
 	def __init__(self, vocab_dim: int, embedding_dim: int, hidden_dim: int, num_layers: int = 2):
 		super(Encoder, self).__init__()
-		# to do
-		self.embedder = nn.Embedding(num_embeddings=vocab_dim, embedding_dim=embedding_dim)
-		self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=0.2)
+		# self.embedder = nn.Embedding(num_embeddings=vocab_dim, embedding_dim=embedding_dim)
+		self.lstm = nn.LSTM(1, hidden_dim, num_layers=num_layers, batch_first=True, dropout=0.2)
 
 	def forward(self, x):
 		seq_lengths = torch.Tensor([sum(1 for num in sublist if num != 0) for sublist in x])
-		x = self.embedder(x.long())
+		x = x.unsqueeze(-1)
 		packed_x = pack_padded_sequence(x, seq_lengths, batch_first=True, enforce_sorted=False)
 		x, (hn, cn) = self.lstm(packed_x)
 		return hn[-1]
