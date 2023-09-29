@@ -2,6 +2,7 @@
 /dataset/
 /models/
 job.slurm
+/word2vec/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -2,16 +2,17 @@ import csv
 import re
 import string
 
+import nltk
 import numpy as np
 import pandas as pd
 import torch
+from gensim.models import Word2Vec
 from loguru import logger
 from matplotlib import pyplot as plt
 from tokenizers import Tokenizer
 
 from utils.utils import read_file_to_df, read_json, write_df_to_file, write_json
-from gensim.models import Word2Vec
-import nltk
+
 
 def align_dataset(fr_file: str, eng_fr_file: str, it_file: str, eng_it_file: str, aligned_file: str) -> None:
 	logger.info("[align_dataset] creating aligned file")
@@ -88,12 +89,14 @@ def seq2idx(corpus: [], embedding_model: str) -> []:
 def pad_sequence(vectorized: [], maximum_len: int) -> []:
 	logger.info(f"[pad_sequence] pad sequence with max length {maximum_len}")
 
-	seq_lengths = list(map(lambda x: x.shape[0], vectorized))
+	seq_lengths = list(map(lambda x: x.shape, vectorized))
+	seq_lengths = [s[0] if len(s) > 0 else 0 for s in seq_lengths]
 	padded_sequences = []
 
 	for seq, seqlen in zip(vectorized, seq_lengths):
-		padded_seq = seq.tolist()  + [0] * (maximum_len - seqlen)
-		padded_sequences.append(padded_seq)
+		if seqlen > 0:
+			padded_seq = seq.tolist() + [0] * (maximum_len - seqlen)
+			padded_sequences.append(padded_seq)
 
 	return padded_sequences
 
@@ -108,7 +111,7 @@ def process_dataset(
 		embedding_model: str
 		) -> tuple[pd.DataFrame, [], []]:
 	logger.info("[process_dataset] processing dataset (0.3 sampled)")
-	original_corpus = read_file_to_df(aligned_file).sample(n=200)#.sample(frac = 0.3)
+	original_corpus = read_file_to_df(aligned_file).sample(frac = 0.3)
 	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop = True)
 
 	eda(original_corpus, plot_file)
@@ -128,14 +131,15 @@ def process_dataset(
 	write_df_to_file(pd.Series(vocab_it, name = 'words'), vocab_file.format(lang = "it"))
 
 	logger.info("[process_dataset] train tokenizer")
-	train_tokenizer(french, embedding_model.format(lang="fr"))
-	train_tokenizer(italian, embedding_model.format(lang="it"))
+	train_tokenizer(french, embedding_model.format(lang = "fr"))
+	train_tokenizer(italian, embedding_model.format(lang = "it"))
 
-	seq2idx_fr = seq2idx(french, embedding_model.format(lang="fr"))
-	seq2idx_it = seq2idx(italian, embedding_model.format(lang="it"))
+	seq2idx_fr = seq2idx(french, embedding_model.format(lang = "fr"))
+	seq2idx_it = seq2idx(italian, embedding_model.format(lang = "it"))
 
-	maximum_len = max(len(max(seq2idx_fr, key = lambda x: x.shape)),
-	                  len(max(seq2idx_it, key = lambda x: x.shape)))
+	maximum_len = max(
+			len(max(seq2idx_fr, key = lambda x: x.shape)), len(max(seq2idx_it, key = lambda x: x.shape))
+			)
 	logger.info(f"[process_dataset] max length of sentences is {maximum_len}")
 
 	logger.info("[process_dataset] modify model configurations")
@@ -167,7 +171,7 @@ def process_dataset(
 	return final_corpus, vocab_fr, vocab_it
 
 
-def train_tokenizer(corpus : [], embedding_model:str) -> None:
+def train_tokenizer(corpus: [], embedding_model: str) -> None:
 	nltk.download('punkt')
 	# Define and train the Word2Vec model
 	model = Word2Vec([s.split() for s in corpus], vector_size = 1, window = 5, min_count = 1, sg = 0)
