@@ -43,8 +43,15 @@ through english first. This creates misalignment in the corpus. Therefore, some 
 * aligned dataset can be found [here](dataset/processed/dataset_aligned.csv)
 * post processed dataset (cleaned and tokenized) can be found [here](dataset/processed/dataset_preprocessed.csv)
 
-Note that due to the highest volume of words in the corpus (> 800k), the vocabulary of each language contains a large
-number of words (> 1 million) therefore, after different trials, it was decided to train a Word2Vec model.
+Due to the extensive volume of words within our corpus, exceeding 800,000, each language's vocabulary encompasses a substantial number of words, surpassing one million in total. 
+After conducting various experiments, we concluded that training a Word2Vec model is a more suitable approach than a simple "word-to-index" method in an attempt to reduce the initial size of individual word embeddings.
+
+Using a basic "word-to-index" approach yields word embeddings with a wide range, spanning from 0 to 100,000. 
+This broad range can pose challenges for neural network training, as it may struggle to achieve effective reconstruction when dealing with such large embeddings. 
+Conversely, normalizing these embeddings can result in exceedingly small values (e.g., 0.000000003), rendering them impractical for reliable model reconstruction.
+
+An alternative solution is to employ techniques like GloVe or Word2Vec. However, it's essential to note that these methods are inherently lossy algorithms, 
+which can make the task of reconstructing the original sentence in natural language more challenging. 
 
 <img src="plot/fr_it_sentences_length.svg">
 
