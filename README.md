@@ -44,9 +44,7 @@ through english first. This creates misalignment in the corpus. Therefore, some 
 * post processed dataset (cleaned and tokenized) can be found [here](dataset/processed/dataset_preprocessed.csv)
 
 Note that due to the highest volume of words in the corpus (> 800k), the vocabulary of each language contains a large
-number of words (> 1 million) therefore, after different trials, it was decided to use BPETokenizer. Byte Pair Encoding
-is a subword tokenization technique that breaks down text into smaller subword units, making it especially useful for
-handling languages with complex morphologies and handling out-of-vocabulary words.
+number of words (> 1 million) therefore, after different trials, it was decided to train a Word2Vec model.
 
 <img src="plot/fr_it_sentences_length.svg">
 
