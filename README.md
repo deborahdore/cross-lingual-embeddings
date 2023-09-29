@@ -19,7 +19,7 @@ process the dataset or not:
 - [utils/processing.py](utils/processing.py) - processing functions
 - [utils/utils.py](utils/utils.py) - utils functions
 - [dao/AEDataset.py](dao/AEDataset.py) - dataset class
-- [embedder](embedder) tokenizers for italian and english using BPE encoding
+- [word2vec](word2vec) word2vec models for italian and french
 
 ### Training & Testing Script
 - [train.py](train.py) - training loop
