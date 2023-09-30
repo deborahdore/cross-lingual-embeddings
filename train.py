@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch.utils.data
 from loguru import logger
 from matplotlib import pyplot as plt
@@ -30,7 +32,7 @@ def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int
 	return torch.mean(loss)
 
 
-def train(config, train_loader: DataLoader, val_loader: DataLoader, model_file: str, plot_file: str) -> None:
+def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file: str) -> None:
 
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 

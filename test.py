@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import torch
@@ -17,7 +19,7 @@ from utils.utils import read_json, load_model
 from loguru import logger
 
 
-def test(config, test_loader: DataLoader, model_file: str) -> None:
+def test(config, test_loader: Any, model_file: str) -> None:
 
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
