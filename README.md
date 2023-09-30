@@ -13,7 +13,7 @@ process the dataset or not:
 
 ### Environment
 - Python 3.9
-- Python dependencies: [requirements.txt](requirements.txt)
+- Python dependencies: [requirements.txt](config/requirements.txt)
 
 ### Data Processing Script
 - [utils/processing.py](utils/processing.py) - processing functions

@@ -2,7 +2,7 @@ import json
 import os
 import tarfile
 import urllib.request
-from typing import Union
+from typing import Any, Tuple, Union
 
 import pandas as pd
 import torch
@@ -62,6 +62,6 @@ def save_model(model: Union[Encoder, Decoder, LatentSpace], file: str) -> None:
 	torch.save(model.state_dict(), file)
 
 
-def load_model(file: str) -> Union[Encoder, Decoder, LatentSpace]:
+def load_model(file: str) -> Any:
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 	return torch.load(file, map_location=device)

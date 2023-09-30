@@ -17,11 +17,10 @@ from utils.utils import read_json, load_model
 from loguru import logger
 
 
-def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> None:
-	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-	logger.info(f"[train] device: {device}")
+def test(config, test_loader: DataLoader, model_file: str) -> None:
 
-	config = read_json(model_config_file)
+	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
 	logger.info(f"[test] {config}")
 
 	# model parameters
@@ -32,13 +31,17 @@ def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> No
 	ls_dim = config['ls_dim']
 	hidden_lstm_dim = config['hidden_lstm_dim']
 	output_dim = config['output_dim']
+	num_layers1 = config['num_layers1']
+	dropout1 = config['dropout1']
+	num_layers2 = config['num_layers2']
+	dropout2 = config['dropout2']
 
 	# model loading
-	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim)
+	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers1, dropout1).to(device)
 	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
 	encoder_fr = encoder_fr.to(device)
 
-	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim)
+	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers1, dropout1).to(device)
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
 	encoder_it = encoder_it.to(device)
 
@@ -46,11 +49,11 @@ def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> No
 	latent_space.load_state_dict(load_model(model_file.format(type='latent_space')))
 	latent_space.to(device)
 
-	decoder_fr = Decoder(ls_dim, hidden_lstm_dim, output_dim)
+	decoder_fr = Decoder(ls_dim, hidden_lstm_dim, output_dim, num_layers2, dropout2).to(device)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
 	decoder_fr.to(device)
 
-	decoder_it = Decoder(ls_dim, hidden_lstm_dim, output_dim)
+	decoder_it = Decoder(ls_dim, hidden_lstm_dim, output_dim, num_layers2, dropout2).to(device)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
 	decoder_it.to(device)
 
@@ -68,6 +71,7 @@ def test(test_loader: DataLoader, model_config_file: str, model_file: str) -> No
 	with tqdm(total=len(test_loader), desc="Testing", unit="batch") as pbar:
 		for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
 			with torch.no_grad():
+
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 				label = label.to(device)

@@ -1,13 +1,17 @@
 {
-    "len_vocab_fr": 1854,
-    "len_vocab_it": 1891,
-    "embedding_dim": 1,
+    "len_vocab_fr": 96807,
+    "len_vocab_it": 114436,
+    "embedding_dim": 100,
     "hidden_dim": 64,
     "ls_dim": 16,
     "hidden_lstm_dim": 64,
-    "output_dim": 84,
+    "output_dim": 100,
     "num_epochs": 25,
     "batch_size": 32,
-    "lr": 0.01,
-    "patience": 3
+    "lr": 0.1,
+    "patience": 3,
+    "num_layers1": 2,
+    "dropout1": 0.2,
+    "num_layers2": 2,
+    "dropout2": 0.2
 }

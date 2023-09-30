@@ -22,6 +22,8 @@ vocab_file = os.path.join(processed_dataset_dir, "vocab_{lang}.txt")
 model_file = os.path.join(model_dir, "{type}.pt")
 plot_file = os.path.join(plot_dir, "{file_name}.svg")
 model_config_file = os.path.join(config_dir, "model_config.json")
+best_model_config_file = os.path.join(config_dir, "best_model_config.json")
+
 embedding_model = os.path.join(tokenizer_dir, "{lang}-tokenizer.model")
 
 # ------- create missing directories ------- #
