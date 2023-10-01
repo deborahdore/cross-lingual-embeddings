@@ -2,6 +2,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import ray
 import torch
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
@@ -19,7 +20,9 @@ from utils.utils import read_json, load_model
 from loguru import logger
 
 
-def test(config, test_loader: Any, model_file: str) -> None:
+def test(config, test_loader_wrapper: Any, model_file: str) -> None:
+
+	test_loader = ray.get(test_loader_wrapper)
 
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 

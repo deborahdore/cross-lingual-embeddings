@@ -10,11 +10,12 @@ from sklearn.model_selection import train_test_split
 
 from config.path import (aligned_file, best_model_config_file, embedding_model, eng_lang_file, lang_file,
                          model_config_file, model_dir, model_file, plot_file, processed_file, vocab_file)
+from test import test
+from train import train
 from utils.dataset import prepare_dataset
 from utils.processing import align_dataset, process_dataset
 from utils.utils import read_file, read_file_to_df, read_json, write_json
-from train import train
-from test import test
+
 
 def parse_command_line():
 	gd = False
@@ -80,17 +81,28 @@ if __name__ == '__main__':
 
 		scheduler = ASHAScheduler(metric = "loss", mode = "min", max_t = 25, grace_period = 1, reduction_factor = 2)
 
-		result = tune.run(
-				partial(
-						train, train_loader = train_loader, val_loader = val_loader,
-						model_file = model_file, plot_file = plot_file
-						), config = config, num_samples = 25, scheduler = scheduler, local_dir = model_dir
-				)
+		try:
+			result = tune.run(
+					partial(
+							train,
+							train_loader_wrapper = train_loader,
+							val_loader_wrapper = val_loader,
+							model_file = model_file,
+							plot_file = plot_file
+							),
+					config = config,
+					num_samples = 25,
+					scheduler = scheduler,
+					local_dir = model_dir,
+					verbose = 1
+					)
 
-		best_trial = result.get_best_trial("loss", "min", "last")
-		logger.info(f"Best trial config: {best_trial.config}")
-		write_json(best_trial.config, best_model_config_file)
-		test(best_trial.config, test_loader, model_file)
+			best_trial = result.get_best_trial("loss", "min", "last")
+			logger.info(f"Best trial config: {best_trial.config}")
+			write_json(best_trial.config, best_model_config_file)
+			test(best_trial.config, test_loader, model_file)
+		finally:
+			ray.shutdown()
 
 	else:
 		train(config, train_loader, val_loader, model_file, plot_file)
