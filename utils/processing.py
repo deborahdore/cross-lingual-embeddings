@@ -110,8 +110,8 @@ def process_dataset(
 		aligned_file: str, processed_file: str, vocab_file: str, model_config_file: str, plot_file: str,
 		embedding_model: str
 		) -> tuple[pd.DataFrame, [], []]:
-	logger.info("[process_dataset] processing dataset (0.3 sampled)")
-	original_corpus = read_file_to_df(aligned_file).sample(frac = 0.3)
+	logger.info("[process_dataset] processing dataset (0.2 sampled)")
+	original_corpus = read_file_to_df(aligned_file).sample(frac = 0.2)
 	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop = True)
 
 	eda(original_corpus, plot_file)

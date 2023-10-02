@@ -67,11 +67,11 @@ if __name__ == '__main__':
 	config = read_json(model_config_file)
 	train_dataset, val_dataset, test_dataset = prepare_dataset(corpus_4_model_training, config)
 
-	train_loader = ray.put(train_dataset)
-	val_loader = ray.put(val_dataset)
-	test_loader = ray.put(test_dataset)
-
 	if optimize:
+
+		train_loader = ray.put(train_dataset)
+		val_loader = ray.put(val_dataset)
+		test_loader = ray.put(test_dataset)
 		config = {"len_vocab_fr":    96807, "len_vocab_it": 114436, "output_dim": 100, "num_epochs": 25,
 		          "batch_size":      32, "patience": 3, "embedding_dim": tune.choice([25, 50, 100, 150]),
 		          "hidden_dim":      tune.choice([16, 32, 64]), "ls_dim": tune.choice([8, 16, 32]),
@@ -88,10 +88,11 @@ if __name__ == '__main__':
 							train_loader_wrapper = train_loader,
 							val_loader_wrapper = val_loader,
 							model_file = model_file,
-							plot_file = plot_file
+							plot_file = plot_file,
+							optimize = optimize
 							),
 					config = config,
-					num_samples = 25,
+					num_samples = 10,
 					scheduler = scheduler,
 					local_dir = model_dir,
 					verbose = 1
@@ -100,10 +101,10 @@ if __name__ == '__main__':
 			best_trial = result.get_best_trial("loss", "min", "last")
 			logger.info(f"Best trial config: {best_trial.config}")
 			write_json(best_trial.config, best_model_config_file)
-			test(best_trial.config, test_loader, model_file)
+			test(best_trial.config, test_loader, model_file, optimize)
 		finally:
 			ray.shutdown()
 
 	else:
-		train(config, train_loader, val_loader, model_file, plot_file)
-		test(config, test_loader, model_file)
+		train(config, train_dataset, val_dataset, model_file, plot_file, optimize)
+		test(config, test_dataset, model_file, optimize)

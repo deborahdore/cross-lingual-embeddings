@@ -5,8 +5,6 @@ import torch.utils.data
 from loguru import logger
 from matplotlib import pyplot as plt
 from torch.nn import MSELoss
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from dao.model import Decoder, Encoder, LatentSpace
@@ -33,10 +31,12 @@ def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int
 	return torch.mean(loss)
 
 
-def train(config, train_loader_wrapper: Any, val_loader_wrapper: Any, model_file: str, plot_file: str) -> None:
+def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file: str, optimize: bool = False) -> None:
 
-	train_loader = ray.get(train_loader_wrapper)
-	val_loader = ray.get(val_loader_wrapper)
+	if optimize:
+		train_loader = ray.get(train_loader)
+		val_loader = ray.get(val_loader)
+
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 	logger.info(f"[train] device: {device}")
@@ -77,13 +77,13 @@ def train(config, train_loader_wrapper: Any, val_loader_wrapper: Any, model_file
 					) + list(decoder_it.parameters()), lr = lr, weight_decay = 1e-8
 			)
 
-	lr_scheduler = ReduceLROnPlateau(
-			optimizer, mode = 'min',  # Adjust based on whether you're minimizing or maximizing a loss
-			factor = 0.5,  # Reduce LR by a factor when the metric plateaus
-			patience = 2,  # Number of epochs with no improvement before reducing LR
-			verbose = False,  # Prints updates when LR is reduced
-			min_lr = 0.001  # Minimum LR, prevents it from going too low
-			)
+	# lr_scheduler = ReduceLROnPlateau(
+	# 		optimizer, mode = 'min',  # Adjust based on whether you're minimizing or maximizing a loss
+	# 		factor = 0.5,  # Reduce LR by a factor when the metric plateaus
+	# 		patience = 2,  # Number of epochs with no improvement before reducing LR
+	# 		verbose = False,  # Prints updates when LR is reduced
+	# 		min_lr = 0.001  # Minimum LR, prevents it from going too low
+	# 		)
 
 	train_losses = []
 	val_losses = []
@@ -126,10 +126,10 @@ def train(config, train_loader_wrapper: Any, val_loader_wrapper: Any, model_file
 
 				max_grad_norm = 1.0
 				torch.nn.utils.clip_grad_norm_(
-					list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
-							decoder_fr.parameters()
-							) + list(decoder_it.parameters()), max_grad_norm
-					)
+						list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
+								decoder_fr.parameters()
+								) + list(decoder_it.parameters()), max_grad_norm
+						)
 
 				optimizer.step()
 
@@ -177,7 +177,7 @@ def train(config, train_loader_wrapper: Any, val_loader_wrapper: Any, model_file
 		# wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
 
 		val_losses.append(avg_val_loss)
-		lr_scheduler.step(avg_val_loss)
+		# lr_scheduler.step(avg_val_loss)
 
 		if avg_val_loss < best_val_loss:
 			best_val_loss = avg_val_loss

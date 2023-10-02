@@ -27,11 +27,11 @@ best_model_config_file = os.path.join(config_dir, "best_model_config.json")
 embedding_model = os.path.join(tokenizer_dir, "{lang}-tokenizer.model")
 
 # ------- create missing directories ------- #
-Path(dataset_dir).mkdir(parents=True, exist_ok=True)
-Path(processed_dataset_dir).mkdir(parents=True, exist_ok=True)
-Path(model_dir).mkdir(parents=True, exist_ok=True)
-Path(plot_dir).mkdir(parents=True, exist_ok=True)
-Path(config_dir).mkdir(parents=True, exist_ok=True)
-Path(tokenizer_dir).mkdir(parents=True, exist_ok=True)
+Path(dataset_dir).mkdir(parents = True, exist_ok = True)
+Path(processed_dataset_dir).mkdir(parents = True, exist_ok = True)
+Path(model_dir).mkdir(parents = True, exist_ok = True)
+Path(plot_dir).mkdir(parents = True, exist_ok = True)
+Path(config_dir).mkdir(parents = True, exist_ok = True)
+Path(tokenizer_dir).mkdir(parents = True, exist_ok = True)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

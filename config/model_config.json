@@ -1,6 +1,6 @@
 {
-    "len_vocab_fr": 96807,
-    "len_vocab_it": 114436,
+    "len_vocab_fr": 25634,
+    "len_vocab_it": 27985,
     "embedding_dim": 100,
     "hidden_dim": 64,
     "ls_dim": 16,
