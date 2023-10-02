@@ -4,7 +4,7 @@ import ray
 import torch.utils.data
 from loguru import logger
 from matplotlib import pyplot as plt
-from torch.nn import MSELoss
+from torch.nn import L1Loss, MSELoss
 from tqdm import tqdm
 
 from dao.model import Decoder, Encoder, LatentSpace
@@ -88,7 +88,7 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 	train_losses = []
 	val_losses = []
 
-	mse_loss = MSELoss()
+	mse_loss = MSELoss(reduction = 'sum')
 
 	# init weight&biases feature
 	# wandb.init(project="cross-lingual-it-fr-embeddings-3-loss",

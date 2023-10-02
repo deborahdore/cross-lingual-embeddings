@@ -8,7 +8,7 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from sklearn.model_selection import train_test_split
 
-from config.path import (aligned_file, best_model_config_file, embedding_model, eng_lang_file, lang_file,
+from config.path import (aligned_file, best_model_config_file, eng_lang_file, lang_file,
                          model_config_file, model_dir, model_file, plot_file, processed_file, vocab_file)
 from test import test
 from train import train
@@ -40,16 +40,16 @@ if __name__ == '__main__':
 		# download_from_url(download_corpus.format(lang="it"), dataset_dir, "it")
 		# download_from_url(download_corpus.format(lang="fr"), dataset_dir, "fr")
 
-		it_file = read_file(lang_file.format(lang = "it"))
-		eng_it_file = read_file(eng_lang_file.format(lang = "it"))
-
-		fr_file = read_file(lang_file.format(lang = "fr"))
-		eng_fr_file = read_file(eng_lang_file.format(lang = "fr"))
-
-		align_dataset(fr_file, eng_fr_file, it_file, eng_it_file, aligned_file)
+		# it_file = read_file(lang_file.format(lang = "it"))
+		# eng_it_file = read_file(eng_lang_file.format(lang = "it"))
+		#
+		# fr_file = read_file(lang_file.format(lang = "fr"))
+		# eng_fr_file = read_file(eng_lang_file.format(lang = "fr"))
+		#
+		# align_dataset(fr_file, eng_fr_file, it_file, eng_it_file, aligned_file)
 
 		corpus, vocab_fr, vocab_it = process_dataset(
-				aligned_file, processed_file, vocab_file, model_config_file, plot_file, embedding_model
+				aligned_file, processed_file, vocab_file, model_config_file, plot_file
 				)
 
 	else:
@@ -84,17 +84,9 @@ if __name__ == '__main__':
 		try:
 			result = tune.run(
 					partial(
-							train,
-							train_loader_wrapper = train_loader,
-							val_loader_wrapper = val_loader,
-							model_file = model_file,
-							plot_file = plot_file,
-							optimize = optimize
-							),
-					config = config,
-					num_samples = 10,
-					scheduler = scheduler,
-					local_dir = model_dir,
+							train, train_loader_wrapper = train_loader, val_loader_wrapper = val_loader,
+							model_file = model_file, plot_file = plot_file, optimize = optimize
+							), config = config, num_samples = 10, scheduler = scheduler, local_dir = model_dir,
 					verbose = 1
 					)
 

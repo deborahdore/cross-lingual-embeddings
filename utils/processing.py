@@ -1,6 +1,7 @@
 import csv
 import re
 import string
+from itertools import chain
 
 import nltk
 import numpy as np
@@ -69,34 +70,34 @@ def create_vocabulary(corpus: pd.Series) -> []:
 	for seq in corpus:
 		vocab += [word for word in seq.split() if word not in vocab]
 
-	return sorted(set(vocab))
+	return ['<pad>'] + sorted(set(vocab))
 
 
-def seq2idx(corpus: [], embedding_model: str) -> []:
-	logger.info("[seq2idx] converting words to embeddings using Word2Vec")
-	model = Word2Vec.load(embedding_model)
-	vectorized_seqs = [np.squeeze([model.wv[word] for word in sentence.split()]) for sentence in corpus]
+def seq2idx(corpus: [], vocab: []) -> []:
+	logger.info("[seq2idx] converting words to embeddings")
+	word_index = {word: index for index, word in enumerate(vocab)}
+	vectorized_seqs = [[word_index.get(word) for word in sentence.split()] for sentence in corpus]
 	return vectorized_seqs
 
 
-# def min_max_scaling(nested_list):
-#     flattened_list = list(chain(*nested_list))
-#     min_val = min(flattened_list)
-#     max_val = max(flattened_list)
-#     scaled_embeddings = [(x - min_val) / (max_val - min_val) for x in nested_list]
-#     return scaled_embeddings
+def normalization(corpus: []):
+	# Compute the L2 norm of each row (sample) in the embeddings
+	norms = np.linalg.norm(corpus, axis = 1, ord = 2, keepdims = True)
+	normalized_embeddings = corpus / norms
+	return normalized_embeddings.tolist()
+
 
 def pad_sequence(vectorized: [], maximum_len: int) -> []:
 	logger.info(f"[pad_sequence] pad sequence with max length {maximum_len}")
 
-	seq_lengths = list(map(lambda x: x.shape, vectorized))
-	seq_lengths = [s[0] if len(s) > 0 else 0 for s in seq_lengths]
+	seq_lengths = list(map(lambda x: len(x.split()), vectorized))
 	padded_sequences = []
 
 	for seq, seqlen in zip(vectorized, seq_lengths):
-		if seqlen > 0:
-			padded_seq = seq.tolist() + [0] * (maximum_len - seqlen)
-			padded_sequences.append(padded_seq)
+		if seqlen < 2 :
+			continue
+		padded_seq = seq + " <pad>" * (maximum_len - seqlen)
+		padded_sequences.append(padded_seq)
 
 	return padded_sequences
 
@@ -104,71 +105,6 @@ def pad_sequence(vectorized: [], maximum_len: int) -> []:
 def count_words(sentence) -> int:
 	words = sentence.split()
 	return len(words)
-
-
-def process_dataset(
-		aligned_file: str, processed_file: str, vocab_file: str, model_config_file: str, plot_file: str,
-		embedding_model: str
-		) -> tuple[pd.DataFrame, [], []]:
-	logger.info("[process_dataset] processing dataset (0.2 sampled)")
-	original_corpus = read_file_to_df(aligned_file).sample(frac = 0.2)
-	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop = True)
-
-	eda(original_corpus, plot_file)
-
-	logger.info("[process_dataset] remove outliers")
-	original_corpus = remove_outliers(original_corpus)
-
-	french = nlp_pipeline(original_corpus['french'])
-	italian = nlp_pipeline(original_corpus['italian'])
-
-	logger.info("[process_dataset] creating vocabulary")
-	vocab_fr = create_vocabulary(french)
-	vocab_it = create_vocabulary(italian)
-
-	logger.info("[process_dataset] writing vocabulary to file")
-	write_df_to_file(pd.Series(vocab_fr, name = 'words'), vocab_file.format(lang = "fr"))
-	write_df_to_file(pd.Series(vocab_it, name = 'words'), vocab_file.format(lang = "it"))
-
-	logger.info("[process_dataset] train tokenizer")
-	train_tokenizer(french, embedding_model.format(lang = "fr"))
-	train_tokenizer(italian, embedding_model.format(lang = "it"))
-
-	seq2idx_fr = seq2idx(french, embedding_model.format(lang = "fr"))
-	seq2idx_it = seq2idx(italian, embedding_model.format(lang = "it"))
-
-	maximum_len = max(
-			len(max(seq2idx_fr, key = lambda x: x.shape)), len(max(seq2idx_it, key = lambda x: x.shape))
-			)
-	logger.info(f"[process_dataset] max length of sentences is {maximum_len}")
-
-	logger.info("[process_dataset] modify model configurations")
-	config = read_json(model_config_file)
-
-	config['output_dim'] = maximum_len
-	config['len_vocab_fr'] = len(vocab_fr)
-	config['len_vocab_it'] = len(vocab_it)
-
-	write_json(config, model_config_file)
-
-	logger.info("[process_dataset] padding sequence")
-	seq2idx_fr_pad = pad_sequence(seq2idx_fr, maximum_len)
-	seq2idx_it_pad = pad_sequence(seq2idx_it, maximum_len)
-
-	seq2idx_it_pad_new = []
-	seq2idx_fr_pad_new = []
-	# to remove sentences that contain only zeros
-	for seq_it, seq_fr in zip(seq2idx_it_pad, seq2idx_fr_pad):
-		if sum(seq_it) > 0 and sum(seq_fr) > 0:
-			seq2idx_it_pad_new.append(seq_it)
-			seq2idx_fr_pad_new.append(seq_fr)
-
-	final_corpus = pd.DataFrame({'french': pd.Series(seq2idx_fr_pad_new), 'italian': pd.Series(seq2idx_it_pad_new)})
-	final_corpus = final_corpus.dropna().reset_index(drop = True)
-
-	write_df_to_file(final_corpus, processed_file)
-
-	return final_corpus, vocab_fr, vocab_it
 
 
 def train_tokenizer(corpus: [], embedding_model: str) -> None:
@@ -209,3 +145,59 @@ def eda(corpus: pd.DataFrame, plot_file: str) -> None:
 	plt.tight_layout()
 	plt.savefig(plot_file.format(file_name = "fr_it_sentences_length"))
 	plt.close()
+
+
+def process_dataset(
+		aligned_file: str, processed_file: str, vocab_file: str, model_config_file: str, plot_file: str
+		) -> tuple[pd.DataFrame, [], []]:
+
+	logger.info("[process_dataset] processing dataset (0.2 sampled)")
+	original_corpus = read_file_to_df(aligned_file).sample(frac = 0.2)
+	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop = True)
+
+	eda(original_corpus, plot_file)
+
+	logger.info("[process_dataset] remove outliers")
+	original_corpus = remove_outliers(original_corpus)
+
+	french = nlp_pipeline(original_corpus['french'])
+	italian = nlp_pipeline(original_corpus['italian'])
+
+	logger.info("[process_dataset] creating vocabulary")
+	vocab_fr = create_vocabulary(french)
+	vocab_it = create_vocabulary(italian)
+
+	max_fr = max(french, key = lambda x: len(x.split()))
+	max_it = max(italian, key = lambda x: len(x.split()))
+	maximum_len = max(len(max_fr.split()), len(max_it.split()))
+	logger.info(f"[process_dataset] max length of sentences is {maximum_len}")
+
+	logger.info("[process_dataset] padding sequence")
+	french = pad_sequence(french, maximum_len)
+	italian = pad_sequence(italian, maximum_len)
+
+	logger.info("[process_dataset] writing vocabulary to file")
+	write_df_to_file(pd.Series(vocab_fr, name = 'words'), vocab_file.format(lang = "fr"))
+	write_df_to_file(pd.Series(vocab_it, name = 'words'), vocab_file.format(lang = "it"))
+
+	seq2idx_fr = seq2idx(french, vocab_fr)
+	seq2idx_it = seq2idx(italian, vocab_it)
+
+	seq2idx_fr = normalization(seq2idx_fr)
+	seq2idx_it = normalization(seq2idx_it)
+
+	logger.info("[process_dataset] modify model configurations")
+	config = read_json(model_config_file)
+
+	config['output_dim'] = maximum_len
+	config['len_vocab_fr'] = len(vocab_fr)
+	config['len_vocab_it'] = len(vocab_it)
+
+	write_json(config, model_config_file)
+
+	final_corpus = pd.DataFrame({'french': pd.Series(seq2idx_fr), 'italian': pd.Series(seq2idx_it)})
+	final_corpus = final_corpus.dropna().reset_index(drop = True)
+
+	write_df_to_file(final_corpus, processed_file)
+
+	return final_corpus, vocab_fr, vocab_it

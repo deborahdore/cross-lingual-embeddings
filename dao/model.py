@@ -20,9 +20,8 @@ class Encoder(nn.Module):
 		super(Encoder, self).__init__()
 		self.embedder = nn.Embedding(num_embeddings = vocab_dim, embedding_dim = embedding_dim)
 		self.lstm = nn.LSTM(
-			embedding_dim, hidden_dim,
-			num_layers = num_layers, batch_first = True, dropout = dropout
-			)
+				embedding_dim, hidden_dim, num_layers = num_layers, batch_first = True, dropout = dropout
+				)
 
 	def forward(self, x):
 		seq_lengths = torch.Tensor([sum(1 for num in sublist if num != 0) for sublist in x])
@@ -37,11 +36,28 @@ class Decoder(nn.Module):
 		super(Decoder, self).__init__()
 		self.lstm = nn.LSTM(ls_dim, hidden_lstm_dim, num_layers = num_layers, dropout = dropout, batch_first = True)
 		self.norm = nn.LayerNorm(hidden_lstm_dim)
-		self.fc = nn.Linear(hidden_lstm_dim, output_dim)
+		self.fc = nn.Linear(hidden_lstm_dim, ls_dim)
 
-		self.output_dim = output_dim
+		self.max_length = output_dim
 
-	def forward(self, x):
-		x, _ = self.lstm(x)
-		x = self.norm(x)
-		return self.fc(x)
+	def forward(self, x, target_input):
+		# x.shape (batch_size, 16)
+		hidden = None
+		output_sequence = []
+
+		for t in range(self.max_length):
+			x, hidden = self.lstm(x, hidden)
+			x = self.norm(x)
+			x = self.fc(x)
+
+			# Append the last output of the LSTM output cell
+			output_sequence.append(x[:, -1])
+
+			# Use the generated character as input for the next time step
+
+		# Stack the generated outputs to create the final output sequence
+		final_output = torch.stack(output_sequence, dim = 1)
+
+		return final_output
+
+
