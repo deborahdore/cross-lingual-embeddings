@@ -1,13 +1,12 @@
 from typing import Tuple
 
 import pandas as pd
-import torch
 from loguru import logger
-from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, random_split
 
 from dao.Dataset import LSTMDataset
 from dao.Vocab import Vocab
+from utils.utils import read_json, write_json
 
 
 def split_dataset(dataset: LSTMDataset, batch_size: int) -> Tuple[DataLoader, DataLoader, DataLoader]:
@@ -19,29 +18,36 @@ def split_dataset(dataset: LSTMDataset, batch_size: int) -> Tuple[DataLoader, Da
 
 	train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
-	train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, shuffle=True,
-							  collate_fn=collate_fn)
-	val_loader = DataLoader(val_dataset, batch_size=batch_size, drop_last=True, shuffle=False, collate_fn=collate_fn)
-	test_loader = DataLoader(test_dataset, batch_size=batch_size, drop_last=True, shuffle=False, collate_fn=collate_fn)
+	train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, shuffle=True)
+	val_loader = DataLoader(val_dataset, batch_size=batch_size, drop_last=True, shuffle=False)
+	test_loader = DataLoader(test_dataset, batch_size=batch_size, drop_last=True, shuffle=False)
 
 	return train_loader, val_loader, test_loader
 
 
-def collate_fn(batch):
-	batch = sorted(batch, key=lambda x: len(x[0]), reverse=True)
-	fr, it, label = zip(*batch)
-	# Pad sequences to the length of the longest sequence in the batch
-	padded_sequences_fr = pad_sequence(fr, batch_first=True, padding_value=0)
-	padded_sequences_it = pad_sequence(it, batch_first=True, padding_value=0)
+def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab: Vocab):
+	logger.info("[prepare_dataset] preparing dataset")
+	dataset = LSTMDataset(corpus_fr=corpus['french'], corpus_it=corpus['italian'], vocab=vocab)
 
-	return torch.Tensor(padded_sequences_fr), torch.Tensor(padded_sequences_it), torch.Tensor(label)
-
-
-def prepare_dataset(corpus_4_model_training: pd.DataFrame, config: {}, vocab_it: Vocab, vocab_fr: Vocab):
-	dataset = LSTMDataset(corpus_fr=corpus_4_model_training['french'].tolist(),
-						  corpus_it=corpus_4_model_training['italian'].tolist(),
-						  vocab_it=vocab_it,
-						  vocab_fr=vocab_fr)
+	config = read_json(model_config_file)
 
 	train_loader, val_loader, test_loader = split_dataset(dataset, config.get("batch_size"))
+
+	config['len_vocab'] = vocab.get_vocab_len()
+	config['output_dim_it'] = dataset.get_max_len_it()
+	config['output_dim_fr'] = dataset.get_max_len_fr()
+
+	write_json(config, model_config_file)
+
 	return train_loader, val_loader, test_loader
+
+
+def create_vocab(french: [], italian: []):
+	# Same vocabulary for both languages
+	logger.info("[create_vocab] creating vocabulary shared between languages")
+	vocab = Vocab()
+	for sentence in french:
+		vocab.add_sentence(sentence, "french")
+	for sentence in italian:
+		vocab.add_sentence(sentence, "italian")
+	return vocab

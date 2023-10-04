@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from loguru import logger
 
-from dao.model import Decoder, Encoder
+from dao.Model import Decoder, Encoder
 
 
 def read_json(json_file_name: str) -> json:

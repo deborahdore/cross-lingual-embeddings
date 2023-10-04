@@ -6,7 +6,7 @@ from loguru import logger
 from torch.nn import L1Loss
 from tqdm import tqdm
 
-from dao.model import Decoder, Encoder
+from dao.Model import Decoder, Encoder
 from train import contrastive_loss
 from utils.utils import load_model
 

@@ -4,10 +4,10 @@ import ray
 import torch.utils.data
 from loguru import logger
 from matplotlib import pyplot as plt
-from torch.nn import L1Loss, MSELoss
+from torch.nn import MSELoss
 from tqdm import tqdm
 
-from dao.model import Decoder, Encoder
+from dao.Model import Decoder, Encoder
 from utils.utils import save_model
 
 
@@ -48,8 +48,7 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 	lr = config['lr']
 
 	# model parameters
-	len_vocab_fr = config['len_vocab_fr']
-	len_vocab_it = config['len_vocab_it']
+	len_vocab = config['len_vocab']
 
 	enc_embedding_dim = config['enc_embedding_dim']
 	enc_hidden_dim = config['enc_hidden_dim']
@@ -58,22 +57,22 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 
 	proj_dim = config['proj_dim']
 
-	dec_embedding_dim = config['dec_embedding_dim']
 	dec_hidden_dim = config['dec_hidden_dim']
-	output_dim = config['output_dim']
+	output_dim_it = config['output_dim_it']
+	output_dim_fr = config['output_dim_fr']
 	dec_num_layers = config['dec_num_layers']
 	dec_dropout = config['dec_dropout']
 
 	# model instantiation
-	encoder_fr = Encoder(len_vocab_fr, enc_embedding_dim, enc_hidden_dim, proj_dim, enc_num_layers, enc_dropout).to(
+	encoder_fr = Encoder(len_vocab, enc_embedding_dim, enc_hidden_dim, proj_dim, enc_num_layers, enc_dropout).to(
 		device)
 
-	encoder_it = Encoder(len_vocab_it, enc_embedding_dim, enc_hidden_dim, proj_dim, enc_num_layers, enc_dropout).to(
+	encoder_it = Encoder(len_vocab, enc_embedding_dim, enc_hidden_dim, proj_dim, enc_num_layers, enc_dropout).to(
 		device)
 
-	decoder_fr = Decoder(len_vocab_fr, dec_embedding_dim, dec_hidden_dim, output_dim, dec_num_layers, dec_dropout).to(
+	decoder_fr = Decoder(proj_dim, dec_hidden_dim, output_dim_fr, dec_num_layers, dec_dropout).to(
 		device)
-	decoder_it = Decoder(len_vocab_it, dec_embedding_dim, dec_hidden_dim, output_dim, dec_num_layers, dec_dropout).to(
+	decoder_it = Decoder(proj_dim, dec_hidden_dim, output_dim_it, dec_num_layers, dec_dropout).to(
 		device)
 
 	# optimizer
@@ -112,8 +111,8 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 
 				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
 
-				output_fr = decoder_fr(embedding_fr, hidden_fr, input_fr, input_fr.size(1))
-				output_it = decoder_it(embedding_it, hidden_it, input_it, input_it.size(1))
+				output_fr = decoder_fr(embedding_fr, hidden_fr)
+				output_it = decoder_it(embedding_it, hidden_it)
 
 				reconstruction_loss = mse_loss(output_it, input_it) + mse_loss(output_fr, input_fr)
 
@@ -121,9 +120,9 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 
 				loss.backward()
 
-				max_grad_norm = 0.25
-				torch.nn.utils.clip_grad_norm_(list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
-					decoder_fr.parameters()) + list(decoder_it.parameters()), max_grad_norm)
+				# max_grad_norm = 0.25
+				# torch.nn.utils.clip_grad_norm_(list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
+				# 	decoder_fr.parameters()) + list(decoder_it.parameters()), max_grad_norm)
 
 				optimizer.step()
 
@@ -157,8 +156,8 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 
 				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
 
-				output_fr = decoder_fr(embedding_fr, hidden_fr, input_fr, input_fr.size(1))
-				output_it = decoder_it(embedding_it, hidden_it, input_it, input_it.size(1))
+				output_fr = decoder_fr(embedding_fr, hidden_fr)
+				output_it = decoder_it(embedding_it, hidden_it)
 
 				reconstruction_loss = mse_loss(output_it, input_it) + mse_loss(output_fr, input_fr)
 
