@@ -23,19 +23,13 @@ class Encoder(nn.Module):
 		x = x.long()
 		embedding = self.embedder(x)
 		out, hidden = self.lstm(embedding)
-		out = nn.Tanh(out)
 		out = self.dropout(out)
 		out = self.fc(out[:, -1, :])
 		return out, hidden
 
 
 class Decoder(nn.Module):
-	def __init__(self,
-				 proj_dim: int,
-				 hidden_dim: int,
-				 output_dim: int,
-				 num_layers: int = 1,
-				 dropout: float = 0.0):
+	def __init__(self, proj_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 1, dropout: float = 0.0):
 		super(Decoder, self).__init__()
 
 		self.lstm = nn.LSTM(proj_dim, hidden_dim, num_layers=num_layers, batch_first=True)
@@ -48,7 +42,6 @@ class Decoder(nn.Module):
 
 	def forward(self, x, hidden):
 		out, _ = self.lstm(x[:, None, :], hidden)
-		out = nn.Tanh(out)
 		out = self.dropout(out)
 		out = self.fc(out[:, -1, :])
 		return out
