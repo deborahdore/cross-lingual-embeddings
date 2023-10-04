@@ -4,6 +4,7 @@ import ray
 import torch.utils.data
 from loguru import logger
 from matplotlib import pyplot as plt
+from ray import train
 from torch.nn import MSELoss
 from tqdm import tqdm
 
@@ -31,7 +32,12 @@ def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int
 	return torch.mean(loss)
 
 
-def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file: str, optimize: bool = False) -> None:
+def train_autoencoder(config,
+					  train_loader: Any,
+					  val_loader: Any,
+					  model_file: str,
+					  plot_file: str,
+					  optimize: bool = False) -> None:
 	if optimize:
 		train_loader = ray.get(train_loader)
 		val_loader = ray.get(val_loader)
@@ -49,14 +55,11 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 
 	# model parameters
 	len_vocab = config['len_vocab']
-
 	enc_embedding_dim = config['enc_embedding_dim']
 	enc_hidden_dim = config['enc_hidden_dim']
 	enc_num_layers = config['enc_num_layers']
 	enc_dropout = config['enc_dropout']
-
 	proj_dim = config['proj_dim']
-
 	dec_hidden_dim = config['dec_hidden_dim']
 	output_dim_it = config['output_dim_it']
 	output_dim_fr = config['output_dim_fr']
@@ -167,6 +170,10 @@ def train(config, train_loader: Any, val_loader: Any, model_file: str, plot_file
 
 		avg_val_loss = total_val_loss / len(val_loader)
 		logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
+
+		if optimize:
+			train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})
+
 		# wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
 
 		val_losses.append(avg_val_loss)

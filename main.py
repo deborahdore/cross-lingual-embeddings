@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from config.path import (aligned_file, eng_lang_file, lang_file, model_config_file, model_file, plot_file,
 						 processed_file)
 from optimization import optimization
-from train import train
+from train import train_autoencoder
 from utils.dataset import create_vocab, prepare_dataset
 from utils.processing import align_dataset, process_dataset
 from utils.utils import read_file, read_file_to_df, read_json
@@ -42,8 +42,10 @@ if __name__ == '__main__':
 		fr_file = read_file(lang_file.format(lang="fr"))
 		eng_fr_file = read_file(eng_lang_file.format(lang="fr"))
 
+		# creating aligned dataset
 		align_dataset(fr_file, eng_fr_file, it_file, eng_it_file, aligned_file)
 
+		# run nlp pipeline
 		corpus = process_dataset(aligned_file, processed_file, plot_file)
 
 	else:
@@ -55,7 +57,9 @@ if __name__ == '__main__':
 	train_loader, val_loader, test_loader = prepare_dataset(corpus_4_model_training, model_config_file, vocab)
 
 	if optimize:
+		# find optimal hyperparameters
 		optimization(train_loader, val_loader, test_loader)
 	else:
+		# normal training
 		config = read_json(model_config_file)
-		train(config, train_loader, val_loader, model_file, plot_file, optimize=False)
+		train_autoencoder(config, train_loader, val_loader, model_file, plot_file, optimize=False)

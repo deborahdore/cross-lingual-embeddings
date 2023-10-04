@@ -10,8 +10,7 @@ from utils.utils import read_file_to_df, write_df_to_file
 
 
 def align_dataset(fr_file: str, eng_fr_file: str, it_file: str, eng_it_file: str, aligned_file: str):
-	######### align dataset french and italian
-	logger.info("[align_dataset] creating aligned file")
+	logger.info("[align_dataset] creating aligned dataset")
 
 	fr_sentences, fr_en_sentences = fr_file.split('\n'), eng_fr_file.split('\n')
 	it_sentences, it_en_sentences = it_file.split('\n'), eng_it_file.split('\n')
@@ -92,14 +91,18 @@ def eda(corpus: pd.DataFrame, plot_file: str):
 
 def process_dataset(aligned_file: str, processed_file: str, plot_file: str):
 	logger.info("[process_dataset] processing dataset (0.2 sampled)")
+	# sample to reduce dimension -> unable to process a bigger file
 	original_corpus = read_file_to_df(aligned_file).sample(frac=0.2)
 	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop=True)
 
+	# exploratory data analysis
 	eda(original_corpus, plot_file)
 
 	logger.info("[process_dataset] remove outliers")
+	# remove sentences over a certain length
 	original_corpus = remove_outliers(original_corpus)
 
+	# run preprocessing
 	french = nlp_pipeline(original_corpus['french'])
 	italian = nlp_pipeline(original_corpus['italian'])
 

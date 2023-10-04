@@ -27,8 +27,10 @@ def split_dataset(dataset: LSTMDataset, batch_size: int) -> Tuple[DataLoader, Da
 
 def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab: Vocab):
 	logger.info("[prepare_dataset] preparing dataset")
+	# creating dataset model
 	dataset = LSTMDataset(corpus_fr=corpus['french'], corpus_it=corpus['italian'], vocab=vocab)
 
+	# modify configuration
 	config = read_json(model_config_file)
 
 	train_loader, val_loader, test_loader = split_dataset(dataset, config.get("batch_size"))
@@ -43,7 +45,7 @@ def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab: Vocab):
 
 
 def create_vocab(french: [], italian: []):
-	# Same vocabulary for both languages
+	# create same vocabulary for both languages
 	logger.info("[create_vocab] creating vocabulary shared between languages")
 	vocab = Vocab()
 	for sentence in french:
