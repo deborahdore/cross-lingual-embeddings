@@ -73,15 +73,13 @@ def train_autoencoder(config,
 	encoder_it = Encoder(len_vocab, enc_embedding_dim, enc_hidden_dim, proj_dim, enc_num_layers, enc_dropout).to(
 		device)
 
-	decoder_fr = Decoder(proj_dim, dec_hidden_dim, output_dim_fr, dec_num_layers, dec_dropout).to(
-		device)
-	decoder_it = Decoder(proj_dim, dec_hidden_dim, output_dim_it, dec_num_layers, dec_dropout).to(
-		device)
+	decoder_fr = Decoder(proj_dim, dec_hidden_dim, output_dim_fr, dec_num_layers, dec_dropout).to(device)
+	decoder_it = Decoder(proj_dim, dec_hidden_dim, output_dim_it, dec_num_layers, dec_dropout).to(device)
 
 	# optimizer
 	optimizer = torch.optim.Adam(list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
 		decoder_fr.parameters()) + list(
-		decoder_it.parameters()), lr=lr)
+		decoder_it.parameters()), lr=lr, weight_decay=5e-4)
 
 	train_losses = []
 	val_losses = []
@@ -103,6 +101,9 @@ def train_autoencoder(config,
 
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
+				mask_fr = (input_fr > 0)
+				mask_it = (input_it > 0)
+
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 				label = label.to(device)
@@ -114,18 +115,19 @@ def train_autoencoder(config,
 
 				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
 
-				output_fr = decoder_fr(embedding_fr, hidden_fr)
-				output_it = decoder_it(embedding_it, hidden_it)
+				output_fr = decoder_fr(embedding_fr, hidden_fr, input_it)
+				output_it = decoder_it(embedding_it, hidden_it, input_it)
 
-				reconstruction_loss = mse_loss(output_it, input_it) + mse_loss(output_fr, input_fr)
+				reconstruction_loss = mse_loss(output_it[mask_it], input_it[mask_it])
+				reconstruction_loss += mse_loss(output_fr[mask_fr], input_fr[mask_fr])
+
 
 				loss = cl_loss + reconstruction_loss
 
 				loss.backward()
 
-				# max_grad_norm = 0.25
-				# torch.nn.utils.clip_grad_norm_(list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
-				# 	decoder_fr.parameters()) + list(decoder_it.parameters()), max_grad_norm)
+				# torch.nn.utils.clip_grad_norm_(list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(
+				# 	decoder_it.parameters()) + list(decoder_fr.parameters()), 0.1)
 
 				optimizer.step()
 
@@ -135,80 +137,84 @@ def train_autoencoder(config,
 
 				pbar.update(1)
 
-		avg_train_loss = total_train_loss / len(train_loader)
-		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
+			avg_train_loss = total_train_loss / len(train_loader)
+			logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
 
-		train_losses.append(avg_train_loss)
-		# wandb.log({"train/loss": avg_train_loss, "epoch": epoch + 1})
+			train_losses.append(avg_train_loss)
+			# wandb.log({"train/loss": avg_train_loss, "epoch": epoch + 1})
 
-		encoder_fr.eval()
-		encoder_it.eval()
-		decoder_fr.eval()
-		decoder_it.eval()
+			encoder_fr.eval()
+			encoder_it.eval()
+			decoder_fr.eval()
+			decoder_it.eval()
 
-		total_val_loss = 0.0
+			total_val_loss = 0.0
 
-		with torch.no_grad():
-			for (input_fr, input_it, label) in val_loader:
-				input_fr = input_fr.to(device)
-				input_it = input_it.to(device)
-				label = label.to(device)
+			with torch.no_grad():
+				for (input_fr, input_it, label) in val_loader:
+					mask_fr = (input_fr > 0)
+					mask_it = (input_it > 0)
 
-				embedding_fr, hidden_fr = encoder_fr(input_fr)
-				embedding_it, hidden_it = encoder_it(input_it)
+					input_fr = input_fr.to(device)
+					input_it = input_it.to(device)
+					label = label.to(device)
 
-				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
+					embedding_fr, hidden_fr = encoder_fr(input_fr)
+					embedding_it, hidden_it = encoder_it(input_it)
 
-				output_fr = decoder_fr(embedding_fr, hidden_fr)
-				output_it = decoder_it(embedding_it, hidden_it)
+					cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
 
-				reconstruction_loss = mse_loss(output_it, input_it) + mse_loss(output_fr, input_fr)
+					output_fr = decoder_fr(embedding_fr, hidden_fr, input_it)
+					output_it = decoder_it(embedding_it, hidden_it, input_it)
 
-				loss = cl_loss + reconstruction_loss
+					reconstruction_loss = mse_loss(output_it[mask_it], input_it[mask_it])
+					reconstruction_loss += mse_loss(output_fr[mask_fr], input_fr[mask_fr])
 
-				total_val_loss += loss.item()
+					loss = cl_loss + reconstruction_loss
 
-		avg_val_loss = total_val_loss / len(val_loader)
-		logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
+					total_val_loss += loss.item()
 
-		if optimize:
-			train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})
+			avg_val_loss = total_val_loss / len(val_loader)
+			logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
 
-		# wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
+			if optimize:
+				train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})
 
-		val_losses.append(avg_val_loss)
+			# wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
 
-		if avg_val_loss < best_val_loss:
-			best_val_loss = avg_val_loss
+			val_losses.append(avg_val_loss)
 
-			# wandb.run.summary["best_loss"] = best_val_loss
+			if avg_val_loss < best_val_loss:
+				best_val_loss = avg_val_loss
 
-			early_stop_counter = 0
+				# wandb.run.summary["best_loss"] = best_val_loss
 
-			# save best model
-			save_model(encoder_fr, file=model_file.format(type="encoder_fr"))
-			save_model(decoder_fr, file=model_file.format(type="decoder_fr"))
-			save_model(encoder_it, file=model_file.format(type="encoder_it"))
-			save_model(decoder_it, file=model_file.format(type="decoder_it"))
+				early_stop_counter = 0
 
-		else:
-			early_stop_counter += 1
-			if early_stop_counter >= patience:
-				logger.info(f"[train] Early stopping at epoch {epoch + 1}")
-				break
+				# save best model
+				save_model(encoder_fr, file=model_file.format(type="encoder_fr"))
+				save_model(decoder_fr, file=model_file.format(type="decoder_fr"))
+				save_model(encoder_it, file=model_file.format(type="encoder_it"))
+				save_model(decoder_it, file=model_file.format(type="decoder_it"))
 
-	logger.info("[train] Training complete.")
+			else:
+				early_stop_counter += 1
+				if early_stop_counter >= patience:
+					logger.info(f"[train] Early stopping at epoch {epoch + 1}")
+					break
 
-	plt.figure(figsize=(10, 6))
-	plt.plot(train_losses, label="Train Loss")
-	plt.plot(val_losses, label="Validation Loss")
-	plt.xlabel("Epoch")
-	plt.ylabel("Loss")
-	plt.title("Training and Validation Loss")
-	plt.legend()
-	plt.grid(True)
-	plt.tight_layout()
-	plt.savefig(plot_file.format(file_name="train_val_loss"))
-	plt.close()
+			logger.info("[train] Training complete.")
 
-# wandb.finish()
+			plt.figure(figsize=(10, 6))
+			plt.plot(train_losses, label="Train Loss")
+			plt.plot(val_losses, label="Validation Loss")
+			plt.xlabel("Epoch")
+			plt.ylabel("Loss")
+			plt.title("Training and Validation Loss")
+			plt.legend()
+			plt.grid(True)
+			plt.tight_layout()
+			plt.savefig(plot_file.format(file_name="train_val_loss"))
+			plt.close()
+
+		# wandb.finish()

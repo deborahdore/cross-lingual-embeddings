@@ -1,11 +1,15 @@
+import io
 from typing import Tuple
 
+import nltk
+import numpy as np
 import pandas as pd
+import torch
 from loguru import logger
 from torch.utils.data import DataLoader, random_split
+from torchtext.vocab import Vocab, build_vocab_from_iterator
 
 from dao.Dataset import LSTMDataset
-from dao.Vocab import Vocab
 from utils.utils import read_json, write_json
 
 
@@ -28,14 +32,14 @@ def split_dataset(dataset: LSTMDataset, batch_size: int) -> Tuple[DataLoader, Da
 def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab: Vocab):
 	logger.info("[prepare_dataset] preparing dataset")
 	# creating dataset model
-	dataset = LSTMDataset(corpus_fr=corpus['french'], corpus_it=corpus['italian'], vocab=vocab)
+	dataset = LSTMDataset(corpus_fr=corpus['french'], corpus_it=corpus['italian'])
 
 	# modify configuration
 	config = read_json(model_config_file)
 
 	train_loader, val_loader, test_loader = split_dataset(dataset, config.get("batch_size"))
 
-	config['len_vocab'] = vocab.get_vocab_len()
+	config['len_vocab'] = len(vocab)
 	config['output_dim_it'] = dataset.get_max_len_it()
 	config['output_dim_fr'] = dataset.get_max_len_fr()
 
@@ -44,12 +48,22 @@ def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab: Vocab):
 	return train_loader, val_loader, test_loader
 
 
-def create_vocab(french: [], italian: []):
+def create_vocab(corpus):
+	# generating vocab from text file
+	def yield_tokens(corpus):
+			for sentence in corpus:
+				yield sentence.split()
+
 	# create same vocabulary for both languages
 	logger.info("[create_vocab] creating vocabulary shared between languages")
-	vocab = Vocab()
-	for sentence in french:
-		vocab.add_sentence(sentence, "french")
-	for sentence in italian:
-		vocab.add_sentence(sentence, "italian")
+
+	corpus = pd.concat([corpus['french'], corpus['italian']], axis=0)
+	vocab = build_vocab_from_iterator(yield_tokens(corpus), specials=['<PAD>', '<UNK>'], max_tokens=20000)
+	vocab.set_default_index(vocab['<UNK>'])
 	return vocab
+
+def sequence2index(corpus: pd.DataFrame, vocab: Vocab):
+	fr_tokenized = [torch.Tensor(vocab.lookup_indices(sentence.split())) for sentence in corpus['french'].values]
+	it_tokenized = [torch.Tensor(vocab.lookup_indices(sentence.split())) for sentence in corpus['italian'].values]
+
+	return pd.DataFrame({'french': fr_tokenized, 'italian': it_tokenized})

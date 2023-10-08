@@ -4,11 +4,16 @@ import sys
 from loguru import logger
 from sklearn.model_selection import train_test_split
 
-from config.path import (aligned_file, eng_lang_file, lang_file, model_config_file, model_file, plot_file,
-						 processed_file)
+from config.path import (aligned_file,
+						 eng_lang_file,
+						 lang_file,
+						 model_config_file,
+						 model_file,
+						 plot_file,
+						 processed_file, )
 from optimization import optimization
 from train import train_autoencoder
-from utils.dataset import create_vocab, prepare_dataset
+from utils.dataset import create_vocab, prepare_dataset, sequence2index
 from utils.processing import align_dataset, process_dataset
 from utils.utils import read_file, read_file_to_df, read_json
 
@@ -51,9 +56,12 @@ if __name__ == '__main__':
 	else:
 		corpus = read_file_to_df(processed_file)
 
-	vocab = create_vocab(corpus['french'].tolist(), corpus['italian'].tolist())
+	vocab = create_vocab(corpus)
 
-	corpus_4_model_training, corpus_4_testing = train_test_split(corpus, test_size=0.1)
+	corpus_tokenized = sequence2index(corpus, vocab)
+
+	corpus_4_model_training, corpus_4_testing = train_test_split(corpus_tokenized, test_size=0.1)
+
 	train_loader, val_loader, test_loader = prepare_dataset(corpus_4_model_training, model_config_file, vocab)
 
 	if optimize:
