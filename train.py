@@ -5,7 +5,7 @@ import torch.utils.data
 from loguru import logger
 from matplotlib import pyplot as plt
 from ray import train
-from torch.nn import MSELoss
+from torch.nn import CrossEntropyLoss, MSELoss
 from tqdm import tqdm
 
 from dao.Model import Decoder, Encoder
@@ -26,7 +26,7 @@ def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int
 	:param margin: Define the threshold for when a pair of images is considered similar
 	:return: The mean of the loss for each pair
 	"""
-
+	label = torch.Tensor(label)
 	dist = torch.nn.functional.pairwise_distance(x1, x2)
 	loss = label * torch.pow(dist, 2) + (1 - label) * torch.pow(torch.clamp(margin - dist, min=0.0, max=None), 2)
 	return torch.mean(loss)
@@ -54,27 +54,25 @@ def train_autoencoder(config,
 	lr = config['lr']
 
 	# model parameters
-	len_vocab = config['len_vocab']
-	enc_embedding_dim = config['enc_embedding_dim']
-	enc_hidden_dim = config['enc_hidden_dim']
-	enc_num_layers = config['enc_num_layers']
+	len_vocab_it = config['len_vocab_it']
+	len_vocab_fr = config['len_vocab_fr']
+
+	embedding_dim = config['embedding_dim']
+	hidden_dim = config['hidden_dim']
+	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
-	proj_dim = config['proj_dim']
-	dec_hidden_dim = config['dec_hidden_dim']
 	output_dim_it = config['output_dim_it']
 	output_dim_fr = config['output_dim_fr']
-	dec_num_layers = config['dec_num_layers']
 	dec_dropout = config['dec_dropout']
 
 	# model instantiation
-	encoder_fr = Encoder(len_vocab, enc_embedding_dim, enc_hidden_dim, proj_dim, enc_num_layers, enc_dropout).to(
-		device)
+	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 
-	encoder_it = Encoder(len_vocab, enc_embedding_dim, enc_hidden_dim, proj_dim, enc_num_layers, enc_dropout).to(
-		device)
+	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 
-	decoder_fr = Decoder(proj_dim, dec_hidden_dim, output_dim_fr, dec_num_layers, dec_dropout).to(device)
-	decoder_it = Decoder(proj_dim, dec_hidden_dim, output_dim_it, dec_num_layers, dec_dropout).to(device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, output_dim_fr, num_layers, dec_dropout).to(device)
+
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, output_dim_it, num_layers, dec_dropout).to(device)
 
 	# optimizer
 	optimizer = torch.optim.Adam(list(encoder_fr.parameters()) + list(encoder_it.parameters()) + list(
@@ -84,7 +82,7 @@ def train_autoencoder(config,
 	train_losses = []
 	val_losses = []
 
-	mse_loss = MSELoss()
+	loss_fn = CrossEntropyLoss()
 
 	# init weight&biases feature
 	# wandb.init(project="cross-lingual-it-fr-embeddings-3-loss",
@@ -101,33 +99,31 @@ def train_autoencoder(config,
 
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
-				mask_fr = (input_fr > 0)
-				mask_it = (input_it > 0)
-
+				break
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
-				label = label.to(device)
 
 				optimizer.zero_grad()
 
-				embedding_fr, hidden_fr = encoder_fr(input_fr)
-				embedding_it, hidden_it = encoder_it(input_it)
+				hidden_fr = encoder_fr(input_fr)
+				hidden_it = encoder_it(input_it)
 
-				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
+				cl_loss = contrastive_loss(hidden_fr[-1, :, :], hidden_it[-1, :, :], label=label)
 
-				output_fr = decoder_fr(embedding_fr, hidden_fr, input_it)
-				output_it = decoder_it(embedding_it, hidden_it, input_it)
+				output_fr = decoder_fr(input_fr, hidden_fr)
+				output_it = decoder_it(input_it, hidden_it)
 
-				reconstruction_loss = mse_loss(output_it[mask_it], input_it[mask_it])
-				reconstruction_loss += mse_loss(output_fr[mask_fr], input_fr[mask_fr])
+				output_it = output_it.view(-1, len_vocab_it)
+				output_fr = output_fr.view(-1, len_vocab_fr)
+				input_it = input_it.view(-1).long()
+				input_fr = input_fr.view(-1).long()
 
+				reconstruction_loss = loss_fn(output_it, input_it)
+				reconstruction_loss += loss_fn(output_fr, input_fr)
 
 				loss = cl_loss + reconstruction_loss
 
 				loss.backward()
-
-				# torch.nn.utils.clip_grad_norm_(list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(
-				# 	decoder_it.parameters()) + list(decoder_fr.parameters()), 0.1)
 
 				optimizer.step()
 
@@ -150,25 +146,26 @@ def train_autoencoder(config,
 
 			total_val_loss = 0.0
 
+			test_loss = MSELoss()
+
 			with torch.no_grad():
 				for (input_fr, input_it, label) in val_loader:
-					mask_fr = (input_fr > 0)
-					mask_it = (input_it > 0)
-
 					input_fr = input_fr.to(device)
 					input_it = input_it.to(device)
-					label = label.to(device)
 
-					embedding_fr, hidden_fr = encoder_fr(input_fr)
-					embedding_it, hidden_it = encoder_it(input_it)
+					hidden_fr = encoder_fr(input_fr)
+					hidden_it = encoder_it(input_it)
 
-					cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
+					cl_loss = contrastive_loss(hidden_fr[-1, :, :], hidden_it[-1, :, :], label=label)
 
-					output_fr = decoder_fr(embedding_fr, hidden_fr, input_it)
-					output_it = decoder_it(embedding_it, hidden_it, input_it)
+					output_fr = decoder_fr(input_fr, hidden_fr)
+					output_fr = torch.argmax(torch.softmax(output_fr, dim=2), dim=2)
 
-					reconstruction_loss = mse_loss(output_it[mask_it], input_it[mask_it])
-					reconstruction_loss += mse_loss(output_fr[mask_fr], input_fr[mask_fr])
+					output_it = decoder_it(input_it, hidden_it)
+					output_it = torch.argmax(torch.softmax(output_it, dim=2), dim=2)
+
+					reconstruction_loss = test_loss(output_it, input_it)
+					reconstruction_loss += test_loss(output_fr, input_fr)
 
 					loss = cl_loss + reconstruction_loss
 
@@ -217,4 +214,4 @@ def train_autoencoder(config,
 			plt.savefig(plot_file.format(file_name="train_val_loss"))
 			plt.close()
 
-		# wandb.finish()
+	# wandb.finish()

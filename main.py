@@ -1,6 +1,7 @@
 import ast
 import sys
 
+import pandas as pd
 from loguru import logger
 from sklearn.model_selection import train_test_split
 
@@ -12,6 +13,7 @@ from config.path import (aligned_file,
 						 plot_file,
 						 processed_file, )
 from optimization import optimization
+from test import test
 from train import train_autoencoder
 from utils.dataset import create_vocab, prepare_dataset, sequence2index
 from utils.processing import align_dataset, process_dataset
@@ -56,13 +58,21 @@ if __name__ == '__main__':
 	else:
 		corpus = read_file_to_df(processed_file)
 
-	vocab = create_vocab(corpus)
+	vocab_fr = create_vocab(corpus['french'])
+	vocab_it = create_vocab(corpus['italian'])
 
-	corpus_tokenized = sequence2index(corpus, vocab)
+	corpus_tokenized = pd.DataFrame({
+		'french' : sequence2index(corpus['french'], vocab_fr),
+		'italian': sequence2index(corpus['italian'], vocab_it)})
 
 	corpus_4_model_training, corpus_4_testing = train_test_split(corpus_tokenized, test_size=0.1)
+	corpus_4_model_training = corpus_4_model_training.reset_index(drop=True)
+	corpus_4_testing = corpus_4_testing.reset_index(drop=True)
 
-	train_loader, val_loader, test_loader = prepare_dataset(corpus_4_model_training, model_config_file, vocab)
+	train_loader, val_loader, test_loader = prepare_dataset(corpus_4_model_training,
+															model_config_file,
+															vocab_fr,
+															vocab_it)
 
 	if optimize:
 		# find optimal hyperparameters
@@ -71,3 +81,4 @@ if __name__ == '__main__':
 		# normal training
 		config = read_json(model_config_file)
 		train_autoencoder(config, train_loader, val_loader, model_file, plot_file, optimize=False)
+		test(config, test_loader, model_file, optimize=False)

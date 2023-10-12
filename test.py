@@ -3,7 +3,7 @@ from typing import Any
 import ray
 import torch
 from loguru import logger
-from torch.nn import L1Loss
+from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
 from dao.Model import Decoder, Encoder
@@ -17,74 +17,64 @@ def test(config, test_loader: Any, model_file: str, optimize: bool = False) -> N
 
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-	logger.info(f"[test] {config}")
+	logger.info(f"[train] device: {device}")
+
 	# model parameters
-	len_vocab_fr = config['len_vocab_fr']
 	len_vocab_it = config['len_vocab_it']
+	len_vocab_fr = config['len_vocab_fr']
 
-	enc_embedding_dim = config['enc_embedding_dim']
-	enc_hidden_dim = config['enc_hidden_dim']
-	enc_num_layers = config['enc_num_layers']
+	embedding_dim = config['embedding_dim']
+	hidden_dim = config['hidden_dim']
+	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
-
-	ls_dim = config['ls_dim']
-
-	dec_embedding_dim = config['dec_embedding_dim']
-	dec_hidden_dim = config['dec_hidden_dim']
-	output_dim = config['output_dim']
-	dec_num_layers = config['dec_num_layers']
+	output_dim_it = config['output_dim_it']
+	output_dim_fr = config['output_dim_fr']
 	dec_dropout = config['dec_dropout']
 
 	# model loading
-	encoder_fr = Encoder(len_vocab_fr, enc_embedding_dim, enc_hidden_dim, enc_num_layers, enc_dropout).to(device)
+	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
-	encoder_fr = encoder_fr.to(device)
 
-	encoder_it = Encoder(len_vocab_it, enc_embedding_dim, enc_hidden_dim, enc_num_layers, enc_dropout).to(device)
+	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
-	encoder_it = encoder_it.to(device)
 
-	latent_space = LatentSpace(enc_hidden_dim, ls_dim)
-	latent_space.load_state_dict(load_model(model_file.format(type='latent_space')))
-	latent_space.to(device)
-
-	decoder_fr = Decoder(len_vocab_fr, dec_embedding_dim, dec_hidden_dim, output_dim, dec_num_layers, dec_dropout).to(
-		device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, output_dim_fr, num_layers, dec_dropout).to(device)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
-	decoder_fr.to(device)
 
-	decoder_it = Decoder(len_vocab_it, dec_embedding_dim, dec_hidden_dim, output_dim, dec_num_layers, dec_dropout).to(
-		device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, output_dim_it, num_layers, dec_dropout).to(device)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
-	decoder_it.to(device)
 
 	encoder_fr.eval()
 	encoder_it.eval()
 	decoder_fr.eval()
 	decoder_it.eval()
-	latent_space.eval()
 
 	total_test_loss = 0.0
 	losses = []
 
-	l1_loss = L1Loss()
+	loss_fn = CrossEntropyLoss()
 
 	with tqdm(total=len(test_loader), desc="Testing", unit="batch") as pbar:
 		for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
 			with torch.no_grad():
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
-				label = label.to(device)
 
-				embedding_fr = latent_space(encoder_fr(input_fr))
-				embedding_it = latent_space(encoder_it(input_it))
+				hidden_fr = encoder_fr(input_fr)
+				hidden_it = encoder_it(input_it)
 
-				loss = contrastive_loss(embedding_fr, embedding_it, label=label)
+				cl_loss = contrastive_loss(hidden_fr[-1, :, :], hidden_it[-1, :, :], label=label)
 
-				output_fr = decoder_fr(embedding_fr)
-				output_it = decoder_it(embedding_it)
+				output_fr = decoder_fr(input_fr, hidden_fr)
+				output_fr = torch.argmax(torch.softmax(output_fr, dim=2), dim=2)
 
-				loss += l1_loss(input_it, output_it) + l1_loss(input_fr, output_fr)
+				output_it = decoder_it(input_it, hidden_it)
+				output_it = torch.argmax(torch.softmax(output_it, dim=2), dim=2)
+
+				reconstruction_loss = loss_fn(output_it, input_it)
+				reconstruction_loss += loss_fn(output_fr, input_fr)
+
+				loss = cl_loss + reconstruction_loss
 
 				total_test_loss += loss.item()
 				losses.append(loss.item())

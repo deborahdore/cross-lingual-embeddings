@@ -20,30 +20,28 @@ def optimization(train_loader, val_loader, test_loader):
 	test_loader = ray.put(test_loader)
 
 	# create configuration to try out
-	config = {
-		"len_vocab"        : 17504965,
-		"output_dim_it"    : 114,
-		"output_dim_fr"    : 128,
-		"num_epochs"       : 25,
-		"batch_size"       : 32,
-		"patience"         : 3,
-		"lr"               : tune.loguniform(1e-4, 1e-1),
-		"enc_embedding_dim": tune.choice([25, 50, 100, 150]),
-		"enc_hidden_dim"   : tune.choice([16, 32, 64]),
-		"enc_num_layers"   : tune.choice([1, 2, 3]),
-		"enc_dropout"      : tune.loguniform(0.2, 0.7),
-		"proj_dim"         : tune.choice([8, 16, 32]),
-		"dec_hidden_dim"   : tune.choice([16, 32, 64]),
-		"dec_num_layers"   : tune.choice([1, 2, 3]),
-		"dec_dropout"      : tune.loguniform(0.2, 0.7)}
 
+	config = {
+		"len_vocab_it" : 20000,
+		"len_vocab_fr" : 20000,
+		"output_dim_it": 102,
+		"output_dim_fr": 102,
+		"num_epochs"   : 25,
+		"patience"     : 3,
+		"batch_size"   : tune.choice([16, 32, 64]),
+		"lr"           : tune.loguniform(1e-4, 1e-1),
+		"embedding_dim": tune.choice([50, 100, 150]),
+		"hidden_dim"   : tune.choice([16, 32, 64]),
+		"num_layers"   : tune.choice([1, 2, 3]),
+		"enc_dropout"  : tune.loguniform(0.2, 0.7),
+		"dec_dropout"  : tune.loguniform(0.2, 0.7)}
 	# scheduler to minimize loss
 	scheduler = ASHAScheduler(metric="loss", mode="min", max_t=25, grace_period=1, reduction_factor=2)
 
 	try:
 		result = tune.run(partial(train_autoencoder,
-								  train_loader_wrapper=train_loader,
-								  val_loader_wrapper=val_loader,
+								  train_loader=train_loader,
+								  val_loader=val_loader,
 								  model_file=model_file,
 								  plot_file=plot_file,
 								  optimize=optimize),
