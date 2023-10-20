@@ -2,7 +2,6 @@ import ast
 import sys
 
 import pandas as pd
-from ablation_study import ablation_study_eval
 from loguru import logger
 from sklearn.model_selection import train_test_split
 
@@ -15,6 +14,7 @@ from config.path import (aligned_file,
 						 processed_file,
 						 study_result_dir, )
 from optimization import optimization
+from study import ablation_study
 from test import visualize_latent_space
 from train import train_autoencoder
 from utils.dataset import create_vocab, sequence2index
@@ -23,16 +23,21 @@ from utils.utils import read_file, read_file_to_df, read_json
 
 
 def parse_command_line():
-	gd = False
-	opt = False
-	abl = False
+	generate = False
+	optimize = False
+	ablation = False
 	if "--generate" in sys.argv:
-		gd = ast.literal_eval(sys.argv[sys.argv.index("--generate") + 1])
+		generate = ast.literal_eval(sys.argv[sys.argv.index("--generate") + 1])
+
 	if "--optimize" in sys.argv:
-		opt = ast.literal_eval(sys.argv[sys.argv.index("--optimize") + 1])
+		assert not ("--ablation" in sys.argv)
+		optimize = ast.literal_eval(sys.argv[sys.argv.index("--optimize") + 1])
+
 	if "--ablation" in sys.argv:
-		abl = ast.literal_eval(sys.argv[sys.argv.index("--ablation") + 1])
-	return gd, opt, abl
+		assert not ("--optimize" in sys.argv)
+		ablation = ast.literal_eval(sys.argv[sys.argv.index("--ablation") + 1])
+
+	return generate, optimize, ablation
 
 
 if __name__ == '__main__':
@@ -41,9 +46,9 @@ if __name__ == '__main__':
 		logger.error("[main] missing arguments from command line")
 		raise Exception("missing arguments from command line")
 
-	generate, optimize, ablation_study = parse_command_line()
+	generate_param, optimize_param, ablation_study_param = parse_command_line()
 
-	if generate:
+	if generate_param:
 
 		# download_from_url(download_corpus.format(lang="it"), dataset_dir, "it")
 		# download_from_url(download_corpus.format(lang="fr"), dataset_dir, "fr")
@@ -74,11 +79,11 @@ if __name__ == '__main__':
 	corpus_4_model_training = corpus_4_model_training.reset_index(drop=True)
 	corpus_4_testing = corpus_4_testing.reset_index(drop=True)
 
-	if optimize:
+	if optimize_param:
 		# find optimal hyperparameters
 		optimization(corpus_4_model_training, model_config_file, study_result_dir, vocab_fr, vocab_it)
-	elif ablation_study:
-		ablation_study_eval(corpus_4_model_training,
+	elif ablation_study_param:
+		ablation_study(corpus_4_model_training,
 							model_config_file,
 							vocab_fr,
 							vocab_it,
