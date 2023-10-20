@@ -43,10 +43,6 @@ translations. In fact, during the European Parliament session, not all languages
 translated back to the target language. Some languages are directly translated from source to target without going
 through english first. This creates misalignment in the corpus. Therefore, some loss of information is expected. <br>
 
-* original dataset can be found [here](dataset/fr) and [here](dataset/it)
-* aligned dataset can be found [here](dataset/processed/dataset_aligned.csv)
-* post processed dataset (cleaned and tokenized) can be found [here](dataset/processed/dataset_preprocessed.csv)
-
 Due to the extensive volume of words within our corpus, exceeding 800,000, each language's vocabulary encompasses a
 substantial number of words, surpassing one million in total.
 After conducting various experiments, we concluded that training a Word2Vec model is a more suitable approach than a
