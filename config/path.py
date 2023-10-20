@@ -11,6 +11,7 @@ processed_dataset_dir = os.path.join(dataset_dir, "processed")
 model_dir = os.path.join(base_dir, "models")
 plot_dir = os.path.join(base_dir, "plot")
 config_dir = os.path.join(base_dir, "config")
+study_result_dir = os.path.join(base_dir, "ablation_study")
 
 # ------- files ------- #
 lang_file = os.path.join(dataset_dir, "{lang}/europarl-v7.{lang}-en.{lang}")
@@ -28,3 +29,4 @@ Path(processed_dataset_dir).mkdir(parents=True, exist_ok=True)
 Path(model_dir).mkdir(parents=True, exist_ok=True)
 Path(plot_dir).mkdir(parents=True, exist_ok=True)
 Path(config_dir).mkdir(parents=True, exist_ok=True)
+Path(study_result_dir).mkdir(parents=True, exist_ok=True)

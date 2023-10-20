@@ -1,9 +1,11 @@
+import os.path
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import torch.utils.data
 from loguru import logger
-from matplotlib import pyplot as plt
 from ray import train
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
@@ -12,7 +14,7 @@ from dao.Model import Decoder, Encoder
 from test import generate
 from utils.dataset import prepare_dataset
 from utils.loss import contrastive_loss
-from utils.utils import save_model
+from utils.utils import save_model, save_plot, write_json
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.manual_seed(123)
@@ -25,7 +27,9 @@ def train_autoencoder(config,
 					  vocab_it: Any,
 					  model_file: str,
 					  plot_file: str,
-					  optimize: bool = False):
+					  study_result_dir: str,
+					  optimize: bool = False,
+					  ablation_study: bool = False):
 	train_loader, val_loader, test_loader = prepare_dataset(corpus, model_config_file, vocab_fr, vocab_it, config)
 
 	logger.info(f"[train] device: {device}")
@@ -71,6 +75,8 @@ def train_autoencoder(config,
 	val_losses = []
 	learning_rates = []
 
+	avg_val_loss = 0.0
+
 	loss_fn = CrossEntropyLoss()
 
 	# init weight&biases feature
@@ -91,15 +97,10 @@ def train_autoencoder(config,
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 
-				encoder_fr.zero_grad()
-				encoder_it.zero_grad()
-				decoder_fr.zero_grad()
-				decoder_it.zero_grad()
-
 				hidden_fr = encoder_fr.detach_hidden(encoder_fr.init_hidden(batch_size, device))
 				hidden_it = encoder_it.detach_hidden(encoder_it.init_hidden(batch_size, device))
 
-				# czmputing embeddings from encoders
+				# computing embeddings from encoders
 				hidden_fr = encoder_fr(input_fr, hidden_fr)
 				hidden_it = encoder_it(input_it, hidden_it)
 
@@ -116,6 +117,8 @@ def train_autoencoder(config,
 											   input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
+
+				optimizer.zero_grad()
 
 				loss.backward()
 
@@ -163,8 +166,8 @@ def train_autoencoder(config,
 				cl_loss = contrastive_loss(hidden_fr[0], hidden_it[0], label=label, device=device)
 				cl_loss += contrastive_loss(hidden_fr[1], hidden_it[1], label=label, device=device)
 
-				output_it, _ = decoder_it(input_it, hidden_it, teacher_forcing=False)
-				output_fr, _ = decoder_fr(input_fr, hidden_fr, teacher_forcing=False)
+				output_it, _ = decoder_it(input_it, hidden_it)
+				output_fr, _ = decoder_fr(input_fr, hidden_fr)
 
 				reconstruction_loss = loss_fn(output_it.reshape(batch_size * input_it.shape[1], -1),
 											  input_it.reshape(-1).long())
@@ -205,29 +208,36 @@ def train_autoencoder(config,
 
 	logger.info("[train] Training complete.")
 
-	plt.figure(figsize=(10, 6))
-	plt.plot(train_losses, label="Train Loss")
-	plt.plot(val_losses, label="Validation Loss")
-	plt.xlabel("Epoch")
-	plt.ylabel("Loss")
-	plt.title("Training and Validation Loss")
-	plt.legend()
-	plt.grid(True)
-	plt.tight_layout()
-	plt.savefig(plot_file.format(file_name="train_val_loss"))
-	plt.close()
+	bleu_score_fr, bleu_score_it = generate(config, test_loader, model_file, vocab_fr, vocab_it)
 
-	plt.figure(figsize=(10, 6))
-	plt.plot(learning_rates, label="Learning Rates")
-	plt.xlabel('Epochs')
-	plt.ylabel('Learning Rate')
-	plt.title("Learning Rate through the epochs")
-	plt.legend()
-	plt.grid(True)
-	plt.tight_layout()
-	plt.savefig(plot_file.format(file_name="learning_rate"))
-	plt.close()
+	if ablation_study:
+		trial_datetime = datetime.now()
+		final_abl_dir = os.path.join(study_result_dir, str(trial_datetime))
+		Path(final_abl_dir).mkdir(parents=True, exist_ok=True)
 
-	generate(config, test_loader, model_file, vocab_fr, vocab_it)
+		train_vs_val_loss_file = os.path.join(final_abl_dir, "train_vs_val_loss.svg")
+		lr_epochs_file = os.path.join(final_abl_dir, "learning_rate.svg")
+
+		# save status + loss
+		models_config = {str(trial_datetime): config}
+		models_config.update({"loss": avg_val_loss})
+		models_config.update({"bleu_it": bleu_score_it})
+		models_config.update({"bleu_fr": bleu_score_fr})
+		write_json(models_config, final_abl_dir)
+
+	else:
+		train_vs_val_loss_file = plot_file.format(file_name="train_vs_val_loss")
+		lr_epochs_file = plot_file.format(file_name="learning_rate")
+
+	# save losses
+	plt_elems = [("train loss", train_losses), ("validation loss", val_losses)]
+	save_plot(plt_elems, "epochs", "losses", "train vs val loss", train_vs_val_loss_file)
+
+	# save learning rates
+	save_plot([("learning rates", learning_rates)],
+			  "epochs",
+			  "learning rates",
+			  "learning rates through epochs",
+			  lr_epochs_file)
 
 # wandb.finish()

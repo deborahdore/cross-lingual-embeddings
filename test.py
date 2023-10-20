@@ -86,16 +86,18 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 			output_fr = torch.argmax(F.softmax(output_fr, dim=-1), dim=-1).squeeze().to(device)
 
 			italian_sentences.append([itos_it[int(i)] for i in output_it])
-			real_italian_sentences.append([itos_it[int(i)] for i in input_it[-1]])
+			real_italian_sentences.append([itos_it[int(i)] for i in input_it.squeeze()])
 
 			french_sentences.append([itos_fr[int(i)] for i in output_fr])
-			real_french_sentences.append([itos_fr[int(i)] for i in input_fr[-1]])
+			real_french_sentences.append([itos_fr[int(i)] for i in input_fr.squeeze()])
 
 	bleu_score_it = bleu_score(candidate_corpus=french_sentences, references_corpus=real_french_sentences)
 	bleu_score_fr = bleu_score(candidate_corpus=italian_sentences, references_corpus=real_italian_sentences)
 
 	logger.info(f"[generate] Bleu score italian corpus {bleu_score_it}")
 	logger.info(f"[generate] Bleu score french corpus {bleu_score_fr}")
+
+	return bleu_score_fr, bleu_score_it
 
 
 def visualize_latent_space(config: {},
@@ -116,6 +118,8 @@ def visualize_latent_space(config: {},
 	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
 	dec_dropout = config['dec_dropout']
+
+	dataset = dataset.sample(n=6).reset_index(drop=True)  # sample 10 for plot
 
 	# load dataset
 	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
@@ -161,11 +165,11 @@ def visualize_latent_space(config: {},
 		hidden_fr = encoder_fr(input_fr, hidden_fr)
 		hidden_it = encoder_it(input_it, hidden_it)
 
-		points.extend(hidden_fr[0][-1].detach().numpy())
-		text.append([itos_fr[int(i)] for i in input_fr])
+		points.extend(hidden_fr[0][-1].cpu().detach().numpy())
+		text.append(" ".join([itos_fr[int(i)] for i in input_fr.squeeze()[:-1]]))
 
-		points.extend(hidden_it[0][-1].detach().numpy())
-		text.append([itos_it[int(i)] for i in input_it])
+		points.extend(hidden_it[0][-1].cpu().detach().numpy())
+		text.append(" ".join([itos_it[int(i)] for i in input_it.squeeze()[:-1]]))
 
 		colors.extend([i] * 2)
 

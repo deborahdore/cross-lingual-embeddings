@@ -2,6 +2,7 @@ import ast
 import sys
 
 import pandas as pd
+from ablation_study import ablation_study_eval
 from loguru import logger
 from sklearn.model_selection import train_test_split
 
@@ -11,7 +12,8 @@ from config.path import (aligned_file,
 						 model_config_file,
 						 model_file,
 						 plot_file,
-						 processed_file, )
+						 processed_file,
+						 study_result_dir, )
 from optimization import optimization
 from test import visualize_latent_space
 from train import train_autoencoder
@@ -23,11 +25,14 @@ from utils.utils import read_file, read_file_to_df, read_json
 def parse_command_line():
 	gd = False
 	opt = False
+	abl = False
 	if "--generate" in sys.argv:
 		gd = ast.literal_eval(sys.argv[sys.argv.index("--generate") + 1])
 	if "--optimize" in sys.argv:
 		opt = ast.literal_eval(sys.argv[sys.argv.index("--optimize") + 1])
-	return gd, opt
+	if "--ablation" in sys.argv:
+		abl = ast.literal_eval(sys.argv[sys.argv.index("--ablation") + 1])
+	return gd, opt, abl
 
 
 if __name__ == '__main__':
@@ -36,7 +41,7 @@ if __name__ == '__main__':
 		logger.error("[main] missing arguments from command line")
 		raise Exception("missing arguments from command line")
 
-	generate, optimize = parse_command_line()
+	generate, optimize, ablation_study = parse_command_line()
 
 	if generate:
 
@@ -71,7 +76,15 @@ if __name__ == '__main__':
 
 	if optimize:
 		# find optimal hyperparameters
-		optimization(corpus_4_model_training, model_config_file, vocab_fr, vocab_it)
+		optimization(corpus_4_model_training, model_config_file, study_result_dir, vocab_fr, vocab_it)
+	elif ablation_study:
+		ablation_study_eval(corpus_4_model_training,
+							model_config_file,
+							vocab_fr,
+							vocab_it,
+							model_file,
+							plot_file,
+							study_result_dir, )
 	else:
 		# normal training
 		config = read_json(model_config_file)
@@ -82,5 +95,6 @@ if __name__ == '__main__':
 						  vocab_it,
 						  model_file,
 						  plot_file,
+						  study_result_dir,
 						  optimize=False)
 		visualize_latent_space(config, corpus_4_testing, model_file, plot_file, vocab_fr, vocab_it)

@@ -1,16 +1,18 @@
 from functools import partial
 
+import pandas as pd
 import ray
 from loguru import logger
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
+from torchtext.vocab import Vocab
 
 from config.path import best_model_config_file, model_dir, model_file, plot_file
 from train import train_autoencoder
 from utils.utils import write_json
 
 
-def optimization(corpus, model_config_file, vocab_fr, vocab_it):
+def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir: str, vocab_fr: Vocab, vocab_it: Vocab):
 	logger.info("[optimization] starting optimization")
 
 	# create configuration to try out
@@ -28,8 +30,8 @@ def optimization(corpus, model_config_file, vocab_fr, vocab_it):
 		"num_layers"   : tune.choice([1, 2, 3]),
 		"enc_dropout"  : tune.loguniform(0.1, 0.3),
 		"dec_dropout"  : tune.loguniform(0.1, 0.3),
-		"alpha"        : tune.loguniform(1, 10),
-		"beta"         : tune.loguniform(1, 10)}
+		"alpha"        : tune.loguniform(0.1, 10),
+		"beta"         : tune.loguniform(0.1, 10)}
 
 	# scheduler to minimize loss
 	scheduler = ASHAScheduler(metric="loss", mode="min", max_t=25, grace_period=1, reduction_factor=2)
@@ -43,6 +45,7 @@ def optimization(corpus, model_config_file, vocab_fr, vocab_it):
 								  vocab_it=vocab_it,
 								  model_file=model_file,
 								  plot_file=plot_file,
+								  study_result_dir=study_result_dir,
 								  optimize=True),
 						  config=config,
 						  num_samples=10,
@@ -61,6 +64,7 @@ def optimization(corpus, model_config_file, vocab_fr, vocab_it):
 						  vocab_it,
 						  model_file,
 						  plot_file,
+						  study_result_dir,
 						  optimize=False)
 
 	finally:

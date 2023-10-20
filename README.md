@@ -14,7 +14,7 @@ process the dataset or not and whether to start the optimization pipeline or not
 ### Environment
 
 - Python 3.9
-- Python dependencies: [requirements.txt](config/requirements.txt)
+- Python dependencies: [requirements.txt](requirements.txt)
 
 ### Data Processing Script
 

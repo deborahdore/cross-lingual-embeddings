@@ -1,5 +1,4 @@
 import math
-import random
 
 import numpy as np
 import torch
@@ -33,7 +32,7 @@ class Encoder(nn.Module):
 		self.embedding_dim = embedding_dim
 		self.hidden_dim = hidden_dim
 
-		self.init_weights()
+	# self.init_weights()
 
 	def init_weights(self):
 		init_range_emb = 0.1
@@ -90,7 +89,7 @@ class Decoder(nn.Module):
 		self.embedding_dim = embedding_dim
 		self.hidden_dim = hidden_dim
 
-		self.init_weights()
+		# self.init_weights()
 		self.vocab = vocab
 
 	def detach_hidden(self, hidden):
@@ -119,8 +118,7 @@ class Decoder(nn.Module):
 		return hidden, cell
 
 	def forward(self, x, hidden, teacher_forcing: bool = True):
-		tf = random.uniform(0, 1)
-		if tf > 0.2 and teacher_forcing == True:
+		if teacher_forcing:
 			output, hidden = self.one_step_decoder(x, hidden)
 			return output, hidden
 		else:  # autoregression

@@ -7,6 +7,7 @@ from typing import Any, Union
 import pandas as pd
 import torch
 from loguru import logger
+from matplotlib import pyplot as plt
 
 from dao.Model import Decoder, Encoder
 
@@ -65,3 +66,17 @@ def save_model(model: Union[Encoder, Decoder], file: str) -> None:
 def load_model(file: str) -> Any:
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 	return torch.load(file, map_location=device)
+
+
+def save_plot(plt_elems, x_label, y_label, title, filename):
+	plt.figure(figsize=(10, 6))
+	for elem in plt_elems:
+		plt.plot(elem[1], label=elem[0])
+	plt.xlabel(x_label)
+	plt.ylabel(y_label)
+	plt.title(title)
+	plt.legend()
+	plt.grid(True)
+	plt.tight_layout()
+	plt.savefig(filename)
+	plt.close()
