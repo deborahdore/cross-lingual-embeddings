@@ -1,13 +1,18 @@
 from typing import Tuple
 
 import pandas as pd
+import spacy
+import torchtext
 from loguru import logger
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, random_split
-from torchtext.vocab import Vocab, build_vocab_from_iterator
+from torchtext.vocab import Vocab
 
 from dao.Dataset import LSTMDataset
-from utils.utils import read_json, write_json
+from utils.utils import write_json
+
+spacy.load('fr_core_news_sm')
+spacy.load('it_core_news_sm')
 
 
 def collate_fn(batch):
@@ -41,13 +46,12 @@ def split_dataset(dataset: LSTMDataset, batch_size: int) -> Tuple[DataLoader, Da
 	return train_loader, val_loader, test_loader
 
 
-def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab_fr: Vocab, vocab_it: Vocab):
+def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab_fr: Vocab, vocab_it: Vocab, config: dict):
 	logger.info("[prepare_dataset] preparing dataset")
 	# creating dataset model
 	dataset = LSTMDataset(corpus_fr=corpus['french'], corpus_it=corpus['italian'])
 
 	# modify configuration
-	config = read_json(model_config_file)
 
 	train_loader, val_loader, test_loader = split_dataset(dataset, config.get("batch_size"))
 
@@ -63,25 +67,28 @@ def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab_fr: Voca
 	return train_loader, val_loader, test_loader
 
 
-def create_vocab(corpus):
+def create_vocab(corpus: pd.DataFrame, language: str):
 	# generating vocab from text file
-	def yield_tokens(corpus):
-		for sentence in corpus:
-			yield sentence.split()
-
-	# create same vocabulary for both languages
 	logger.info("[create_vocab] creating vocabulary")
+	tokenizer = torchtext.data.utils.get_tokenizer('spacy', language=language)
 
-	vocab = build_vocab_from_iterator(yield_tokens(corpus),
-									  specials=['<PAD>', '<UNK>', '<SOS>', '<EOS>'],
-									  max_tokens=20000)
-	vocab.set_default_index(vocab['<UNK>'])
-	return vocab
+	tokenized_dataset = corpus.apply(lambda x: tokenizer(x))
+
+	vocab = torchtext.vocab.build_vocab_from_iterator(tokenized_dataset, min_freq=3, max_tokens=30000)
+	vocab.insert_token('<pad>', 0)
+	vocab.insert_token('<sos>', 1)
+	vocab.insert_token('<eos>', 2)
+	vocab.insert_token('<unk>', 3)
+
+	vocab.set_default_index(vocab['<unk>'])
+
+	tokenized_dataset = tokenized_dataset.apply(lambda x: x + ["<eos>"])
+
+	return tokenized_dataset, vocab
 
 
-def sequence2index(corpus: pd.DataFrame, vocab: Vocab):
-	SOS = vocab.lookup_indices(['<SOS>'])  # start of sentence
-	EOS = vocab.lookup_indices(['<EOS>'])  # end of sentence
-	tokenized = [vocab.lookup_indices(sentence.split()) for sentence in corpus.values]
-	complete = [SOS + sentence + EOS for sentence in tokenized]
-	return complete
+def sequence2index(corpus: pd.DataFrame, vocab: Vocab):  # end of sentence
+	encoded = []
+	for sentence in corpus:
+		encoded.append([vocab[token] for token in sentence])
+	return encoded

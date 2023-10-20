@@ -13,9 +13,9 @@ from config.path import (aligned_file,
 						 plot_file,
 						 processed_file, )
 from optimization import optimization
-from test import test
+from test import visualize_latent_space
 from train import train_autoencoder
-from utils.dataset import create_vocab, prepare_dataset, sequence2index
+from utils.dataset import create_vocab, sequence2index
 from utils.processing import align_dataset, process_dataset
 from utils.utils import read_file, read_file_to_df, read_json
 
@@ -58,27 +58,29 @@ if __name__ == '__main__':
 	else:
 		corpus = read_file_to_df(processed_file)
 
-	vocab_fr = create_vocab(corpus['french'])
-	vocab_it = create_vocab(corpus['italian'])
+	tokenized_dataset_fr, vocab_fr = create_vocab(corpus['french'], "fr_core_news_sm")
+	tokenized_dataset_it, vocab_it = create_vocab(corpus['italian'], "it_core_news_sm")
 
 	corpus_tokenized = pd.DataFrame({
-		'french' : sequence2index(corpus['french'], vocab_fr),
-		'italian': sequence2index(corpus['italian'], vocab_it)})
+		'french' : sequence2index(tokenized_dataset_fr, vocab_fr),
+		'italian': sequence2index(tokenized_dataset_it, vocab_it)})
 
 	corpus_4_model_training, corpus_4_testing = train_test_split(corpus_tokenized, test_size=0.1)
 	corpus_4_model_training = corpus_4_model_training.reset_index(drop=True)
 	corpus_4_testing = corpus_4_testing.reset_index(drop=True)
 
-	train_loader, val_loader, test_loader = prepare_dataset(corpus_4_model_training,
-															model_config_file,
-															vocab_fr,
-															vocab_it)
-
 	if optimize:
 		# find optimal hyperparameters
-		optimization(train_loader, val_loader, test_loader)
+		optimization(corpus_4_model_training, model_config_file, vocab_fr, vocab_it)
 	else:
 		# normal training
 		config = read_json(model_config_file)
-		train_autoencoder(config, train_loader, val_loader, model_file, plot_file, optimize=False)
-		test(config, test_loader, model_file, optimize=False)
+		train_autoencoder(config,
+						  corpus_4_model_training,
+						  model_config_file,
+						  vocab_fr,
+						  vocab_it,
+						  model_file,
+						  plot_file,
+						  optimize=False)
+		visualize_latent_space(config, corpus_4_testing, model_file, plot_file, vocab_fr, vocab_it)

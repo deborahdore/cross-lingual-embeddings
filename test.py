@@ -1,25 +1,32 @@
 from typing import Any
 
-import ray
+import numpy as np
+import pandas as pd
 import torch
 from loguru import logger
-from torch.nn import CrossEntropyLoss
-from tqdm import tqdm
+from matplotlib import pyplot as plt
+from sklearn.decomposition import PCA
+from torch.utils.data import DataLoader
+from torchtext.data import bleu_score
+from torchtext.vocab import Vocab
 
+from dao.Dataset import LSTMDataset
 from dao.Model import Decoder, Encoder
-from train import contrastive_loss
 from utils.utils import load_model
 
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-def test(config, test_loader: Any, model_file: str, optimize: bool = False) -> None:
-	if optimize:
-		test_loader = ray.get(test_loader)
+import torch.nn.functional as F
 
-	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-	logger.info(f"[train] device: {device}")
+def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_it: Vocab):
+	test_loader = DataLoader(test_loader.dataset, batch_size=1, shuffle=False)
+
+	logger.info(f"[generate] device: {device}")
 
 	# model parameters
+	batch_size = 1
+
 	len_vocab_it = config['len_vocab_it']
 	len_vocab_fr = config['len_vocab_fr']
 
@@ -27,178 +34,154 @@ def test(config, test_loader: Any, model_file: str, optimize: bool = False) -> N
 	hidden_dim = config['hidden_dim']
 	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
-	output_dim_it = config['output_dim_it']
-	output_dim_fr = config['output_dim_fr']
 	dec_dropout = config['dec_dropout']
 
 	# model loading
 	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
+	encoder_fr.to(device)
 
 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
+	encoder_it.to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, output_dim_fr, num_layers, dec_dropout).to(device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, vocab_fr, num_layers, dec_dropout).to(device)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
+	decoder_fr.to(device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, output_dim_it, num_layers, dec_dropout).to(device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, vocab_it, num_layers, dec_dropout).to(device)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
+	decoder_it.to(device)
 
 	encoder_fr.eval()
 	encoder_it.eval()
 	decoder_fr.eval()
 	decoder_it.eval()
 
-	total_test_loss = 0.0
-	losses = []
+	italian_sentences = []
+	real_italian_sentences = []
 
-	loss_fn = CrossEntropyLoss()
+	french_sentences = []
+	real_french_sentences = []
 
-	with tqdm(total=len(test_loader), desc="Testing", unit="batch") as pbar:
-		for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
-			with torch.no_grad():
-				input_fr = input_fr.to(device)
-				input_it = input_it.to(device)
+	itos_it = vocab_it.get_itos()
+	itos_fr = vocab_fr.get_itos()
 
-				hidden_fr = encoder_fr(input_fr)
-				hidden_it = encoder_it(input_it)
+	for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
+		hidden_fr = encoder_fr.init_hidden(batch_size, device)
+		hidden_it = encoder_it.init_hidden(batch_size, device)
 
-				cl_loss = contrastive_loss(hidden_fr[-1, :, :], hidden_it[-1, :, :], label=label)
+		with torch.no_grad():
+			input_fr = input_fr.to(device)
+			input_it = input_it.to(device)
 
-				output_fr = decoder_fr(input_fr, hidden_fr)
-				output_fr = torch.argmax(torch.softmax(output_fr, dim=2), dim=2)
+			hidden_fr = encoder_fr(input_fr, hidden_fr)
+			hidden_it = encoder_it(input_it, hidden_it)
 
-				output_it = decoder_it(input_it, hidden_it)
-				output_it = torch.argmax(torch.softmax(output_it, dim=2), dim=2)
+			output_it, _ = decoder_it(input_it, hidden_fr, teacher_forcing=False)
+			output_fr, _ = decoder_fr(input_fr, hidden_it, teacher_forcing=False)
 
-				reconstruction_loss = loss_fn(output_it, input_it)
-				reconstruction_loss += loss_fn(output_fr, input_fr)
+			# get indexes
+			output_it = torch.argmax(F.softmax(output_it, dim=-1), dim=-1).squeeze().to(device)
+			output_fr = torch.argmax(F.softmax(output_fr, dim=-1), dim=-1).squeeze().to(device)
 
-				loss = cl_loss + reconstruction_loss
+			italian_sentences.append([itos_it[int(i)] for i in output_it])
+			real_italian_sentences.append([itos_it[int(i)] for i in input_it[-1]])
 
-				total_test_loss += loss.item()
-				losses.append(loss.item())
+			french_sentences.append([itos_fr[int(i)] for i in output_fr])
+			real_french_sentences.append([itos_fr[int(i)] for i in input_fr[-1]])
 
-			pbar.update(1)
+	bleu_score_it = bleu_score(candidate_corpus=french_sentences, references_corpus=real_french_sentences)
+	bleu_score_fr = bleu_score(candidate_corpus=italian_sentences, references_corpus=real_italian_sentences)
 
-	avg_test_loss = total_test_loss / len(test_loader)
-	logger.info(f"[test] Average Test Loss: {avg_test_loss:.20f}")
-
-# def visualize_latent_space(
-# 		dataset: pd.DataFrame, embedding_model: str, model_config_file: str, model_file: str,
-# 		plot_file: str
-# 		) -> None:
-# 	config = read_json(model_config_file)
-# 	logger.info(f"[visualize_latent_space] {config}")
-#
-# 	# model parameters
-# 	len_vocab_fr = config['len_vocab_fr']
-# 	len_vocab_it = config['len_vocab_it']
-# 	embedding_dim = config['embedding_dim']
-# 	hidden_dim = config['hidden_dim']
-# 	ls_dim = config['ls_dim']
-#
-# 	# load dataset
-# 	dataset = dataset.sample(n = 10).reset_index(drop = True)
-# 	dataset = AEDataset(corpus_fr = dataset['french'], corpus_it = dataset['italian'], negative_sampling = False)
-#
-# 	# load saved models
-# 	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim)
-# 	encoder_fr.load_state_dict(load_model(model_file.format(type = 'encoder_fr')))
-#
-# 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim)
-# 	encoder_it.load_state_dict(load_model(model_file.format(type = 'encoder_it')))
-#
-# 	latent_space = LatentSpace(hidden_dim, ls_dim)
-# 	latent_space.load_state_dict(load_model(model_file.format(type = 'latent_space')))
-#
-# 	encoder_fr.eval()
-# 	encoder_it.eval()
-# 	latent_space.eval()
-#
-# 	points = []
-# 	text = []
-# 	colors = []
-#
-# 	loader = DataLoader(dataset, batch_size = 1)
-#
-# 	for i, (sent_fr, sent_it, _) in enumerate(loader):
-# 		# Extract the embeddings from the latent space
-# 		embedding_fr = latent_space(encoder_fr(sent_fr))
-# 		embedding_it = latent_space(encoder_it(sent_it))
-#
-# 		points.extend(embedding_fr.detach().numpy())
-# 		points.extend(embedding_it.detach().numpy())
-#
-# 		text.append(get_sentence_in_natural_language(sent_fr, embedding_model, "fr"))
-# 		text.append(get_sentence_in_natural_language(sent_it, embedding_model, "it"))
-#
-# 		colors.extend([i] * 2)
-#
-# 	points = np.array(points)
-# 	pca = PCA(n_components = 2, svd_solver = 'full')
-# 	new_points = pca.fit_transform(points)
-#
-# 	plt.figure(figsize = (10, 10))
-# 	plt.scatter(new_points[:, 0], new_points[:, 1], s = 20.0, c = colors, cmap = 'tab10', alpha = 0.9)
-#
-# 	for i, label in enumerate(text):
-# 		plt.text(new_points[i, 0], new_points[i, 1], label, fontsize = 8, ha = 'center', va = 'bottom')
-#
-# 	plt.title('Latent Space Projection')
-# 	plt.xlabel("X")
-# 	plt.ylabel("Y")
-# 	plt.savefig(plot_file.format(file_name = "latent_space_projection"))
-# 	# plt.show()
-# 	plt.close()
+	logger.info(f"[generate] Bleu score italian corpus {bleu_score_it}")
+	logger.info(f"[generate] Bleu score french corpus {bleu_score_fr}")
 
 
-# def translate(dataset: pd.DataFrame, vocab_it: [], vocab_fr: [], model_config_file: str, model_file: str):
-# 	config = read_json(model_config_file)
-# 	logger.info(f"[translate] {config}")
-#
-# 	# model parameters
-# 	len_vocab_fr = config['len_vocab_fr']
-# 	len_vocab_it = config['len_vocab_it']
-# 	embedding_dim = config['embedding_dim']
-# 	hidden_dim = config['hidden_dim']
-# 	ls_dim = config['ls_dim']
-# 	hidden_lstm_dim = config['hidden_lstm_dim']
-# 	output_dim = config['output_dim']
-#
-# 	# model loading
-# 	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim)
-# 	encoder_fr.load_state_dict(load_model(model_file.format(type = 'encoder_fr')))
-#
-# 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim)
-# 	encoder_it.load_state_dict(load_model(model_file.format(type = 'encoder_it')))
-#
-# 	latent_space = LatentSpace(hidden_dim, ls_dim)
-# 	latent_space.load_state_dict(load_model(model_file.format(type = 'latent_space')))
-#
-# 	decoder_fr = Decoder(ls_dim, hidden_lstm_dim, output_dim)
-# 	decoder_fr.load_state_dict(load_model(model_file.format(type = 'decoder_fr')))
-#
-# 	decoder_it = Decoder(ls_dim, hidden_lstm_dim, output_dim)
-# 	decoder_it.load_state_dict(load_model(model_file.format(type = 'decoder_it')))
-#
-# 	encoder_fr.eval()
-# 	encoder_it.eval()
-# 	decoder_fr.eval()
-# 	decoder_it.eval()
-# 	latent_space.eval()
-# 	candidate_corpus = []
-# 	references_corpus = []
-#
-# 	dataset = AEDataset(corpus_fr = dataset['french'], corpus_it = dataset['italian'], negative_sampling = False)
-# 	loader = DataLoader(dataset, batch_size = 1)
-#
-# 	for batch_idx, (sentence_fr, sentence_it, _) in enumerate(loader):
-# 		with torch.no_grad():
-# 			output_it = decoder_it(latent_space(encoder_fr(sentence_fr)))
-#
-# 			candidate_corpus.append(get_sentence_in_natural_language(output_it, vocab_it, "it"))
-# 			references_corpus.append(get_sentence_in_natural_language(sentence_it, vocab_it, "it"))
-#
-# 	logger.info(f'Bleu score: '
-# 	            f'{bleu_score(candidate_corpus = candidate_corpus, references_corpus = references_corpus)}')
+def visualize_latent_space(config: {},
+						   dataset: pd.DataFrame,
+						   model_file: str,
+						   plot_file: str,
+						   vocab_fr: Vocab,
+						   vocab_it: Vocab):
+	logger.info(f"[visualize_latent_space] {config}")
+
+	# model parameters
+	len_vocab_it = config['len_vocab_it']
+	len_vocab_fr = config['len_vocab_fr']
+	batch_size = config['batch_size']
+
+	embedding_dim = config['embedding_dim']
+	hidden_dim = config['hidden_dim']
+	num_layers = config['num_layers']
+	enc_dropout = config['enc_dropout']
+	dec_dropout = config['dec_dropout']
+
+	# load dataset
+	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
+
+	# model loading
+	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
+	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
+	encoder_fr.to(device)
+
+	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
+	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
+	encoder_it.to(device)
+
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, vocab_fr, num_layers, dec_dropout).to(device)
+	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
+	decoder_fr.to(device)
+
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, vocab_it, num_layers, dec_dropout).to(device)
+	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
+	decoder_it.to(device)
+
+	encoder_fr.eval()
+	encoder_it.eval()
+	decoder_fr.eval()
+	decoder_it.eval()
+
+	points = []
+	text = []
+	colors = []
+
+	loader = DataLoader(dataset, batch_size=1)
+
+	itos_fr = vocab_fr.get_itos()
+	itos_it = vocab_it.get_itos()
+
+	for i, (input_fr, input_it, _) in enumerate(loader):
+		input_fr = input_fr.to(device)
+		input_it = input_it.to(device)
+
+		hidden_fr = encoder_fr.init_hidden(batch_size, device)
+		hidden_it = encoder_it.init_hidden(batch_size, device)
+
+		hidden_fr = encoder_fr(input_fr, hidden_fr)
+		hidden_it = encoder_it(input_it, hidden_it)
+
+		points.extend(hidden_fr[0][-1].detach().numpy())
+		text.append([itos_fr[int(i)] for i in input_fr])
+
+		points.extend(hidden_it[0][-1].detach().numpy())
+		text.append([itos_it[int(i)] for i in input_it])
+
+		colors.extend([i] * 2)
+
+	points = np.array(points)
+	pca = PCA(n_components=2, svd_solver='full')
+	new_points = pca.fit_transform(points)
+
+	plt.figure(figsize=(10, 10))
+	plt.scatter(new_points[:, 0], new_points[:, 1], s=20.0, c=colors, cmap='tab10', alpha=0.9)
+
+	for i, label in enumerate(text):
+		plt.text(new_points[i, 0], new_points[i, 1], label, fontsize=8, ha='center', va='bottom')
+
+	plt.title('Latent Space Projection')
+	plt.xlabel("X")
+	plt.ylabel("Y")
+	plt.savefig(plot_file.format(file_name="latent_space_projection"))
+	# plt.show()
+	plt.close()

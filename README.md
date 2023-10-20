@@ -6,10 +6,10 @@ an encoder-decoder model_
 ## **REPLICABILITY**
 
 Each experiment was conducted on a single machine by running the [main](main.py) script and specifying whether to
-process the dataset or not:
+process the dataset or not and whether to start the optimization pipeline or not:
 
-`python main.py True # process dataset` <br>
-`python main.py False # skip processing step`
+`python main.py --generate True --optimize True # process dataset and optimize model` <br>
+`python main.py --generate False --optimize False # skip processing and optimization step`
 
 ### Environment
 
