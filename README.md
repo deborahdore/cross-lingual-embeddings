@@ -38,10 +38,10 @@ or not (only one between optimization and ablation study can be true):
 
 ### Configurations
 
-- [model_config.json](config/model_config.json) - model's configurations
+- [config/model_config.json](config/model_config.json) - model's configurations
 - [dao/Model.py](dao/Model.py) - model skeleton
 - [dao/Dataset.py](dao/Model.py) - dataset skeleton
-- [loss.py](utils/loss.py) - contrastive loss definition
+- [utils/loss.py](utils/loss.py) - contrastive loss definition
 
 ## **DATASET**
 
@@ -69,20 +69,7 @@ reconstructing the original sentence in natural language more challenging.
 <img src="plot/fr_it_sentences_length.svg">
 
 ## **MODEL'S ARCHITECTURE**
-<div style="display: flex; justify-content: space-between;">
-  <div style="flex: 1;">
-    <ul>
-      <li><a href="models/encoder_it.pt">Italian encoder</a></li>
-      <li><a href="models/encoder_fr.pt">French encoder</a></li>
-      <li><a href="models/decoder_it.pt">Italian decoder</a></li>
-      <li><a href="models/decoder_fr.pt">French decoder</a></li>
-      <li><a href="models/latent_space.pt">Latent Space Model</a></li>
-    </ul>
-  </div>
-  <div style="flex: 1;">
-    <img src="plot/architecture.svg" alt="Architecture">
-  </div>
-</div>
+<img src="plot/architecture.svg" alt="Architecture">
 
 ## **LATENT SPACE PROJECTION**
 
