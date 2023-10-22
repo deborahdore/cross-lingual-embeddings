@@ -27,11 +27,12 @@ def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir:
 		"lr"           : tune.loguniform(1e-4, 1e-1),
 		"embedding_dim": tune.choice([100, 150, 200]),
 		"hidden_dim"   : tune.choice([16, 32, 64, 128]),
+		"hidden_dim2"  : tune.choice([64, 128, 256, 512]),
 		"num_layers"   : tune.choice([1, 2, 3]),
 		"enc_dropout"  : tune.loguniform(0.1, 0.3),
 		"dec_dropout"  : tune.loguniform(0.1, 0.3),
-		"alpha"        : tune.loguniform(0.1, 10),
-		"beta"         : tune.loguniform(0.1, 10)}
+		"alpha"        : tune.loguniform(0.1, 1),
+		"beta"         : tune.loguniform(0.1, 1)}
 
 	# scheduler to minimize loss
 	scheduler = ASHAScheduler(metric="loss", mode="min", max_t=25, grace_period=1, reduction_factor=2)

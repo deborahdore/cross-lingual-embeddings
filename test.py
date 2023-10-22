@@ -32,6 +32,8 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
+	hidden_dim2 = config['hidden_dim2']
+
 	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
 	dec_dropout = config['dec_dropout']
@@ -45,11 +47,13 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
 	encoder_it.to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, vocab_fr, num_layers, dec_dropout).to(device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, vocab_fr, num_layers, dec_dropout).to(
+		device)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
 	decoder_fr.to(device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, vocab_it, num_layers, dec_dropout).to(device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, vocab_it, num_layers, dec_dropout).to(
+		device)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
 	decoder_it.to(device)
 
@@ -91,8 +95,8 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 			french_sentences.append([itos_fr[int(i)] for i in output_fr])
 			real_french_sentences.append([itos_fr[int(i)] for i in input_fr.squeeze()])
 
-	bleu_score_it = bleu_score(candidate_corpus=french_sentences, references_corpus=real_french_sentences)
-	bleu_score_fr = bleu_score(candidate_corpus=italian_sentences, references_corpus=real_italian_sentences)
+	bleu_score_it = bleu_score(candidate_corpus=french_sentences, references_corpus=real_french_sentences, max_n=10)
+	bleu_score_fr = bleu_score(candidate_corpus=italian_sentences, references_corpus=real_italian_sentences, max_n=10)
 
 	logger.info(f"[generate] Bleu score italian corpus {bleu_score_it}")
 	logger.info(f"[generate] Bleu score french corpus {bleu_score_fr}")
@@ -115,6 +119,7 @@ def visualize_latent_space(config: {},
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
+	hidden_dim2 = config['hidden_dim2']
 	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
 	dec_dropout = config['dec_dropout']
@@ -133,11 +138,13 @@ def visualize_latent_space(config: {},
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
 	encoder_it.to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, vocab_fr, num_layers, dec_dropout).to(device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, vocab_fr, num_layers, dec_dropout).to(
+		device)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
 	decoder_fr.to(device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, vocab_it, num_layers, dec_dropout).to(device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, vocab_it, num_layers, dec_dropout).to(
+		device)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
 	decoder_it.to(device)
 

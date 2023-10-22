@@ -51,12 +51,6 @@ class Encoder(nn.Module):
 		cell = torch.zeros(self.num_layers, batch_size, self.hidden_dim).to(device)
 		return hidden, cell
 
-	def detach_hidden(self, hidden):
-		hidden, cell = hidden
-		hidden = hidden.detach()
-		cell = cell.detach()
-		return hidden, cell
-
 	def forward(self, x, hidden):
 		lengths = torch.sum(x != 0, dim=1).cpu()
 		embeds = self.embedder(x.long())
@@ -70,6 +64,7 @@ class Decoder(nn.Module):
 				 vocab_dim: int,
 				 embedding_dim: int,
 				 hidden_dim: int,
+				 hidden_dim2: int,
 				 vocab: Vocab,
 				 num_layers: int = 1,
 				 dropout: float = 0.0):
@@ -83,7 +78,8 @@ class Decoder(nn.Module):
 							   dropout=dropout,
 							   bidirectional=False)
 		self.norm = nn.LayerNorm(hidden_dim)
-		self.fc = nn.Linear(hidden_dim, vocab_dim)
+		self.fc1 = nn.Linear(hidden_dim, hidden_dim2)
+		self.fc2 = nn.Linear(hidden_dim2, vocab_dim)
 
 		self.num_layers = num_layers
 		self.embedding_dim = embedding_dim
@@ -138,7 +134,7 @@ class Decoder(nn.Module):
 									   torch.zeros((1, 1, output.shape[-1]), device='cpu'),
 									   axis=0).to(x.device)
 
-				input = torch.argmax(F.softmax(output, dim=-1), dim=-1).to(x.device)
+				input = torch.multinomial(F.softmax(output, dim=-1), num_samples=1, replacement=True).to(x.device)
 				result = torch.cat((result, output), dim=1).to(x.device)
 
 			return result, hidden
@@ -150,5 +146,6 @@ class Decoder(nn.Module):
 		output_packed, hidden = self.decoder(packed_data, hidden)
 		output, lens = pad_packed_sequence(output_packed, batch_first=True)
 		output = self.norm(output)
-		output = self.fc(output)
+		output = self.fc1(output)
+		output = self.fc2(output)
 		return output, hidden

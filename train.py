@@ -48,6 +48,7 @@ def train_autoencoder(config,
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
+	hidden_dim2 = config['hidden_dim2']
 	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
 	dec_dropout = config['dec_dropout']
@@ -60,9 +61,11 @@ def train_autoencoder(config,
 
 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, vocab_fr, num_layers, dec_dropout).to(device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, vocab_fr, num_layers, dec_dropout).to(
+		device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, vocab_it, num_layers, dec_dropout).to(device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, vocab_it, num_layers, dec_dropout).to(
+		device)
 
 	# optimizer
 	parameters = list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(decoder_it.parameters()) + list(
@@ -92,13 +95,13 @@ def train_autoencoder(config,
 
 		total_train_loss = 0.0
 
+		hidden_fr = encoder_fr.init_hidden(batch_size, device)
+		hidden_it = encoder_it.init_hidden(batch_size, device)
+
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
-
-				hidden_fr = encoder_fr.detach_hidden(encoder_fr.init_hidden(batch_size, device))
-				hidden_it = encoder_it.detach_hidden(encoder_it.init_hidden(batch_size, device))
 
 				# computing embeddings from encoders
 				hidden_fr = encoder_fr(input_fr, hidden_fr)
@@ -106,15 +109,17 @@ def train_autoencoder(config,
 
 				# constrastive loss with label
 				cl_loss = contrastive_loss(hidden_fr[0], hidden_it[0], label=label, device=device)
-				cl_loss += contrastive_loss(hidden_fr[1], hidden_it[1], label=label, device=device)
+
+				hidden_it = decoder_it.detach_hidden(hidden_it)
+				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
 
 				output_it, _ = decoder_it(input_it, hidden_it)
 				output_fr, _ = decoder_fr(input_fr, hidden_fr)
 
-				reconstruction_loss = loss_fn(output_it.reshape(batch_size * input_it.shape[1], -1),
-											  input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.reshape(batch_size * input_fr.shape[1], -1),
-											   input_fr.reshape(-1).long())
+				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it).contiguous(),
+											  input_it.reshape(-1).contiguous().long())
+				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr).contiguous(),
+											   input_fr.reshape(-1).contiguous().long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
@@ -122,10 +127,7 @@ def train_autoencoder(config,
 
 				loss.backward()
 
-				torch.nn.utils.clip_grad_norm_(encoder_fr.parameters(), 0.25)
-				torch.nn.utils.clip_grad_norm_(encoder_it.parameters(), 0.25)
-				torch.nn.utils.clip_grad_norm_(decoder_fr.parameters(), 0.25)
-				torch.nn.utils.clip_grad_norm_(decoder_it.parameters(), 0.25)
+				torch.nn.utils.clip_grad_norm_(parameters, 0.25)
 
 				optimizer.step()
 
@@ -139,6 +141,9 @@ def train_autoencoder(config,
 		scheduler.step()
 		avg_train_loss = total_train_loss / len(train_loader)
 		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
+		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Last Contrastive Loss: {cl_loss.item():.20f}")
+		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Last Reconstruction Loss: "
+					f"{reconstruction_loss.item():.20f}")
 
 		train_losses.append(avg_train_loss)
 		# wandb.log({"train/loss": avg_train_loss, "epoch": epoch + 1})
@@ -150,13 +155,13 @@ def train_autoencoder(config,
 
 		total_val_loss = 0.0
 
+		hidden_fr = encoder_fr.init_hidden(batch_size, device)
+		hidden_it = encoder_it.init_hidden(batch_size, device)
+
 		with torch.no_grad():
 			for (input_fr, input_it, label) in val_loader:
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
-
-				hidden_fr = encoder_fr.detach_hidden(encoder_fr.init_hidden(batch_size, device))
-				hidden_it = encoder_it.detach_hidden(encoder_it.init_hidden(batch_size, device))
 
 				# computing embeddings from encoders
 				hidden_fr = encoder_fr(input_fr, hidden_fr)
@@ -164,15 +169,17 @@ def train_autoencoder(config,
 
 				# constrastive loss with label
 				cl_loss = contrastive_loss(hidden_fr[0], hidden_it[0], label=label, device=device)
-				cl_loss += contrastive_loss(hidden_fr[1], hidden_it[1], label=label, device=device)
+
+				hidden_it = decoder_it.detach_hidden(hidden_it)
+				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
 
 				output_it, _ = decoder_it(input_it, hidden_it)
 				output_fr, _ = decoder_fr(input_fr, hidden_fr)
 
-				reconstruction_loss = loss_fn(output_it.reshape(batch_size * input_it.shape[1], -1),
-											  input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.reshape(batch_size * input_fr.shape[1], -1),
-											   input_fr.reshape(-1).long())
+				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it).contiguous(),
+											  input_it.reshape(-1).contiguous().long())
+				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr).contiguous(),
+											   input_fr.reshape(-1).contiguous().long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 

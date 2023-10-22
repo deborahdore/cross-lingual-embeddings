@@ -30,12 +30,12 @@ def parse_command_line():
 		generate = ast.literal_eval(sys.argv[sys.argv.index("--generate") + 1])
 
 	if "--optimize" in sys.argv:
-		assert not ("--ablation" in sys.argv)
 		optimize = ast.literal_eval(sys.argv[sys.argv.index("--optimize") + 1])
 
 	if "--ablation" in sys.argv:
-		assert not ("--optimize" in sys.argv)
 		ablation = ast.literal_eval(sys.argv[sys.argv.index("--ablation") + 1])
+		if ablation:
+			assert not optimize
 
 	return generate, optimize, ablation
 
@@ -84,12 +84,12 @@ if __name__ == '__main__':
 		optimization(corpus_4_model_training, model_config_file, study_result_dir, vocab_fr, vocab_it)
 	elif ablation_study_param:
 		ablation_study(corpus_4_model_training,
-							model_config_file,
-							vocab_fr,
-							vocab_it,
-							model_file,
-							plot_file,
-							study_result_dir, )
+					   model_config_file,
+					   vocab_fr,
+					   vocab_it,
+					   model_file,
+					   plot_file,
+					   study_result_dir, )
 	else:
 		# normal training
 		config = read_json(model_config_file)
