@@ -3,7 +3,7 @@
     "len_vocab_fr": 30004,
     "output_dim_it": 106,
     "output_dim_fr": 113,
-    "num_epochs": 25,
+    "num_epochs": 100,
     "patience": 5,
     "batch_size": 32,
     "lr": 0.01,

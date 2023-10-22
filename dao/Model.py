@@ -134,7 +134,9 @@ class Decoder(nn.Module):
 									   torch.zeros((1, 1, output.shape[-1]), device='cpu'),
 									   axis=0).to(x.device)
 
-				input = torch.multinomial(F.softmax(output, dim=-1), num_samples=1, replacement=True).to(x.device)
+				input = torch.multinomial(F.softmax(output, dim=-1).squeeze(),
+										  num_samples=1,
+										  replacement=True).to(x.device)
 				result = torch.cat((result, output), dim=1).to(x.device)
 
 			return result, hidden
