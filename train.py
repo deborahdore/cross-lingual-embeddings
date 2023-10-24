@@ -7,7 +7,7 @@ import pandas as pd
 import torch.utils.data
 from loguru import logger
 from ray import train
-from torch.nn import CrossEntropyLoss
+from torch.nn import NLLLoss
 from tqdm import tqdm
 
 from dao.Model import Decoder, Encoder
@@ -80,11 +80,13 @@ def train_autoencoder(config,
 
 	avg_val_loss = 0.0
 
-	loss_fn = CrossEntropyLoss()
+	loss_fn = NLLLoss(ignore_index=0)
 
 	# init weight&biases feature
 	# wandb.init(project="cross-lingual-it-fr-embeddings-3-loss",
 	# 		   config=config}
+
+	teacher_forcing = True
 
 	for epoch in range(num_epochs):
 
@@ -98,28 +100,30 @@ def train_autoencoder(config,
 		hidden_fr = encoder_fr.init_hidden(batch_size, device)
 		hidden_it = encoder_it.init_hidden(batch_size, device)
 
+		if epoch == 5:
+			logger.info("[train] disabling teacher forcing ")
+			teacher_forcing = False
+
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 
 				# computing embeddings from encoders
-				hidden_fr = encoder_fr(input_fr, hidden_fr)
-				hidden_it = encoder_it(input_it, hidden_it)
+				output_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+				output_it, hidden_it = encoder_it(input_it, hidden_it)
+
+				hidden_it = hidden_it.detach()
+				hidden_fr = hidden_fr.detach()
 
 				# constrastive loss with label
-				cl_loss = contrastive_loss(hidden_fr[0], hidden_it[0], label=label, device=device)
+				cl_loss = contrastive_loss(hidden_fr, hidden_it, label=label, device=device)
 
-				hidden_it = decoder_it.detach_hidden(hidden_it)
-				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
+				output_it, _ = decoder_it(input_it, hidden_it, teacher_forcing)
+				output_fr, _ = decoder_fr(input_fr, hidden_fr, teacher_forcing)
 
-				output_it, _ = decoder_it(input_it, hidden_it)
-				output_fr, _ = decoder_fr(input_fr, hidden_fr)
-
-				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it).contiguous(),
-											  input_it.reshape(-1).contiguous().long())
-				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr).contiguous(),
-											   input_fr.reshape(-1).contiguous().long())
+				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
@@ -127,7 +131,7 @@ def train_autoencoder(config,
 
 				loss.backward()
 
-				torch.nn.utils.clip_grad_norm_(parameters, 0.25)
+				# torch.nn.utils.clip_grad_norm_(parameters, 0.25)
 
 				optimizer.step()
 
@@ -170,16 +174,11 @@ def train_autoencoder(config,
 				# constrastive loss with label
 				cl_loss = contrastive_loss(hidden_fr[0], hidden_it[0], label=label, device=device)
 
-				hidden_it = decoder_it.detach_hidden(hidden_it)
-				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
+				output_it, _ = decoder_it(input_it, hidden_it, teacher_forcing=False)
+				output_fr, _ = decoder_fr(input_fr, hidden_fr, teacher_forcing=False)
 
-				output_it, _ = decoder_it(input_it, hidden_it)
-				output_fr, _ = decoder_fr(input_fr, hidden_fr)
-
-				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it).contiguous(),
-											  input_it.reshape(-1).contiguous().long())
-				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr).contiguous(),
-											   input_fr.reshape(-1).contiguous().long())
+				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 

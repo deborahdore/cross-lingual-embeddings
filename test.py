@@ -16,8 +16,6 @@ from utils.utils import load_model
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-import torch.nn.functional as F
-
 
 def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_it: Vocab):
 	test_loader = DataLoader(test_loader.dataset, batch_size=1, shuffle=False)
@@ -79,15 +77,15 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
-			hidden_fr = encoder_fr(input_fr, hidden_fr)
-			hidden_it = encoder_it(input_it, hidden_it)
+			output_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+			output_it, hidden_it = encoder_it(input_it, hidden_it)
 
 			output_it, _ = decoder_it(input_it, hidden_fr, teacher_forcing=False)
 			output_fr, _ = decoder_fr(input_fr, hidden_it, teacher_forcing=False)
 
 			# get indexes
-			output_it = torch.argmax(F.softmax(output_it, dim=-1), dim=-1).squeeze().to(device)
-			output_fr = torch.argmax(F.softmax(output_fr, dim=-1), dim=-1).squeeze().to(device)
+			output_it = output_it.argmax(dim=-1).squeeze().to(device)
+			output_fr = output_fr.argmax(dim=-1).squeeze().to(device)
 
 			italian_sentences.append([itos_it[int(i)] for i in output_it])
 			real_italian_sentences.append([itos_it[int(i)] for i in input_it.squeeze()])
@@ -124,7 +122,7 @@ def visualize_latent_space(config: {},
 	enc_dropout = config['enc_dropout']
 	dec_dropout = config['dec_dropout']
 
-	dataset = dataset.sample(n=6).reset_index(drop=True)  # sample 10 for plot
+	dataset = dataset[dataset['french'].str.len() < 10].sample(n=8).reset_index(drop=True)  # sample 10 for plot
 
 	# load dataset
 	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
@@ -162,23 +160,24 @@ def visualize_latent_space(config: {},
 	itos_fr = vocab_fr.get_itos()
 	itos_it = vocab_it.get_itos()
 
-	for i, (input_fr, input_it, _) in enumerate(loader):
-		input_fr = input_fr.to(device)
-		input_it = input_it.to(device)
+	hidden_fr = encoder_fr.init_hidden(batch_size, device)
+	hidden_it = encoder_it.init_hidden(batch_size, device)
 
-		hidden_fr = encoder_fr.init_hidden(batch_size, device)
-		hidden_it = encoder_it.init_hidden(batch_size, device)
+	with torch.no_grad():
+		for i, (input_fr, input_it, _) in enumerate(loader):
+			input_fr = input_fr.to(device)
+			input_it = input_it.to(device)
 
-		hidden_fr = encoder_fr(input_fr, hidden_fr)
-		hidden_it = encoder_it(input_it, hidden_it)
+			output_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+			output_it, hidden_it = encoder_it(input_it, hidden_it)
 
-		points.extend(hidden_fr[0][-1].cpu().detach().numpy())
-		text.append(" ".join([itos_fr[int(i)] for i in input_fr.squeeze()[:-1]]))
+			points.extend(hidden_fr[-1].cpu().detach().numpy())
+			text.append(" ".join([itos_fr[int(i)] for i in input_fr.squeeze()[:-1]]))
 
-		points.extend(hidden_it[0][-1].cpu().detach().numpy())
-		text.append(" ".join([itos_it[int(i)] for i in input_it.squeeze()[:-1]]))
+			points.extend(hidden_it[-1].cpu().detach().numpy())
+			text.append(" ".join([itos_it[int(i)] for i in input_it.squeeze()[:-1]]))
 
-		colors.extend([i] * 2)
+			colors.extend([i] * 2)
 
 	points = np.array(points)
 	pca = PCA(n_components=2, svd_solver='full')

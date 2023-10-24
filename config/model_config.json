@@ -1,8 +1,8 @@
 {
     "len_vocab_it": 30004,
     "len_vocab_fr": 30004,
-    "output_dim_it": 106,
-    "output_dim_fr": 113,
+    "output_dim_it": 102,
+    "output_dim_fr": 112,
     "num_epochs": 100,
     "patience": 5,
     "batch_size": 32,
