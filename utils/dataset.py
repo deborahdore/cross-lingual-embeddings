@@ -4,8 +4,9 @@ import pandas as pd
 import spacy
 import torchtext
 from loguru import logger
+from sklearn.model_selection import train_test_split
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torchtext.vocab import Vocab
 
 from dao.Dataset import LSTMDataset
@@ -29,18 +30,25 @@ def collate_fn(batch):
 	return padded_french_sentences, padded_italian_sentences, labels
 
 
-def split_dataset(dataset: LSTMDataset, batch_size: int) -> Tuple[DataLoader, DataLoader, DataLoader]:
-	train_size = int(0.7 * len(dataset))
-	val_size = int(0.10 * len(dataset))
-	test_size = len(dataset) - train_size - val_size
+def split_dataset(corpus: pd.DataFrame, batch_size: int) -> Tuple[DataLoader, DataLoader, DataLoader]:
+	train, test = train_test_split(corpus, test_size=0.2, random_state=42)
+	train, val = train_test_split(train, test_size=0.1, random_state=42)
 
-	logger.info(f"[split_dataset] len train: {train_size} | len validation: {val_size} | len test: {test_size}")
+	logger.info(f"[split_dataset] len train: {0.7 * len(corpus)} | len validation: {0.1 * len(corpus)} | len test: "
+				f"{0.2 * len(corpus)}")
 
-	train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+	train = train.reset_index(drop=True)
+	test = test.reset_index(drop=True)
+	val = val.reset_index(drop=True)
 
+	train_dataset = LSTMDataset(corpus_fr=train['french'], corpus_it=train['italian'])
 	train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, shuffle=True,
 							  collate_fn=collate_fn)
+
+	val_dataset = LSTMDataset(corpus_fr=val['french'], corpus_it=val['italian'], negative_sampling=False)
 	val_loader = DataLoader(val_dataset, batch_size=batch_size, drop_last=True, shuffle=False, collate_fn=collate_fn)
+
+	test_dataset = LSTMDataset(corpus_fr=test['french'], corpus_it=test['italian'], negative_sampling=False)
 	test_loader = DataLoader(test_dataset, batch_size=batch_size, drop_last=True, shuffle=False, collate_fn=collate_fn)
 
 	return train_loader, val_loader, test_loader
@@ -48,19 +56,12 @@ def split_dataset(dataset: LSTMDataset, batch_size: int) -> Tuple[DataLoader, Da
 
 def prepare_dataset(corpus: pd.DataFrame, model_config_file: str, vocab_fr: Vocab, vocab_it: Vocab, config: dict):
 	logger.info("[prepare_dataset] preparing dataset")
-	# creating dataset model
-	dataset = LSTMDataset(corpus_fr=corpus['french'], corpus_it=corpus['italian'])
-
 	# modify configuration
 
-	train_loader, val_loader, test_loader = split_dataset(dataset, config.get("batch_size"))
+	train_loader, val_loader, test_loader = split_dataset(corpus, config.get("batch_size"))
 
 	config['len_vocab_it'] = len(vocab_it)
 	config['len_vocab_fr'] = len(vocab_fr)
-
-	# todo: remove?
-	config['output_dim_it'] = dataset.get_max_len_it()
-	config['output_dim_fr'] = dataset.get_max_len_fr()
 
 	write_json(config, model_config_file)
 
@@ -74,7 +75,7 @@ def create_vocab(corpus: pd.DataFrame, language: str):
 
 	tokenized_dataset = corpus.apply(lambda x: tokenizer(x))
 
-	vocab = torchtext.vocab.build_vocab_from_iterator(tokenized_dataset, min_freq=3, max_tokens=30000)
+	vocab = torchtext.vocab.build_vocab_from_iterator(tokenized_dataset, max_tokens=30000)
 	vocab.insert_token('<pad>', 0)
 	vocab.insert_token('<sos>', 1)
 	vocab.insert_token('<eos>', 2)

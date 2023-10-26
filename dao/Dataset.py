@@ -27,3 +27,6 @@ class LSTMDataset(Dataset):
 
 	def get_max_len_fr(self):
 		return len(max(self.french, key=len))
+
+	def set_negative_sampling(self, negative_sampling):
+		self.negative_sampling = negative_sampling

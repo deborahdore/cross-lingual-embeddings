@@ -1,4 +1,5 @@
 import os.path
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -86,7 +87,8 @@ def train_autoencoder(config,
 	# wandb.init(project="cross-lingual-it-fr-embeddings-3-loss",
 	# 		   config=config}
 
-	teacher_forcing = True
+	itos_it = vocab_it.get_itos()
+	itos_fr = vocab_fr.get_itos()
 
 	for epoch in range(num_epochs):
 
@@ -100,11 +102,9 @@ def train_autoencoder(config,
 		hidden_fr = encoder_fr.init_hidden(batch_size, device)
 		hidden_it = encoder_it.init_hidden(batch_size, device)
 
-		if epoch == 5:
-			logger.info("[train] disabling teacher forcing ")
-			teacher_forcing = False
-
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
+			# train each encoder-decoder on their language
+
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
@@ -113,14 +113,14 @@ def train_autoencoder(config,
 				output_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
 				output_it, hidden_it = encoder_it(input_it, hidden_it)
 
-				hidden_it = hidden_it.detach()
-				hidden_fr = hidden_fr.detach()
+				hidden_it = decoder_it.detach_hidden(hidden_it)
+				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
 
 				# constrastive loss with label
-				cl_loss = contrastive_loss(hidden_fr, hidden_it, label=label, device=device)
+				cl_loss = contrastive_loss(hidden_fr[0][-1], hidden_it[0][-1], label=label, device=device)
 
-				output_it, _ = decoder_it(input_it, hidden_it, teacher_forcing)
-				output_fr, _ = decoder_fr(input_fr, hidden_fr, teacher_forcing)
+				output_it = decoder_it(input_it, hidden_it)
+				output_fr = decoder_fr(input_fr, hidden_fr)
 
 				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it), input_it.reshape(-1).long())
 				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr), input_fr.reshape(-1).long())
@@ -141,8 +141,10 @@ def train_autoencoder(config,
 
 				pbar.update(1)
 
+		# optimize learning rate
 		learning_rates.append(optimizer.param_groups[0]["lr"])
 		scheduler.step()
+
 		avg_train_loss = total_train_loss / len(train_loader)
 		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
 		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Last Contrastive Loss: {cl_loss.item():.20f}")
@@ -163,19 +165,23 @@ def train_autoencoder(config,
 		hidden_it = encoder_it.init_hidden(batch_size, device)
 
 		with torch.no_grad():
+			# test translation
 			for (input_fr, input_it, label) in val_loader:
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 
 				# computing embeddings from encoders
-				hidden_fr = encoder_fr(input_fr, hidden_fr)
-				hidden_it = encoder_it(input_it, hidden_it)
+				_, hidden_fr = encoder_fr(input_fr, hidden_fr)
+				_, hidden_it = encoder_it(input_it, hidden_it)
 
 				# constrastive loss with label
-				cl_loss = contrastive_loss(hidden_fr[0], hidden_it[0], label=label, device=device)
+				cl_loss = contrastive_loss(hidden_fr[0][-1], hidden_it[0][-1], label=label, device=device)
 
-				output_it, _ = decoder_it(input_it, hidden_it, teacher_forcing=False)
-				output_fr, _ = decoder_fr(input_fr, hidden_fr, teacher_forcing=False)
+				output_it = decoder_it(input_fr, hidden_fr)  # todo test without hidden, test with original hidden
+				output_fr = decoder_fr(input_it, hidden_it)
+
+				output_it = torch.nn.functional.pad(output_it, (0, 0, 0, input_it.shape[1] - output_it.shape[1], 0, 0))
+				output_fr = torch.nn.functional.pad(output_fr, (0, 0, 0, input_fr.shape[1] - output_fr.shape[1], 0, 0))
 
 				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it), input_it.reshape(-1).long())
 				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr), input_fr.reshape(-1).long())
@@ -183,6 +189,20 @@ def train_autoencoder(config,
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
 				total_val_loss += loss.item()
+
+			num = random.randint(0, batch_size)
+			french_real_phrase = " ".join([itos_fr[int(i)] for i in input_fr[num].squeeze()[:-1]])
+			italian_real_phrase = " ".join([itos_it[int(i)] for i in input_it[num].squeeze()[:-1]])
+
+			french_fake_phrase = " ".join([itos_fr[int(i)] for i in output_fr.argmax(dim=-1)[num].squeeze()[:-1]])
+			italian_fake_phrase = " ".join([itos_it[int(i)] for i in output_it.argmax(dim=-1)[num].squeeze()[:-1]])
+
+			logger.info("--------------- ITALIAN: ")
+			logger.info(f"Generated: {italian_fake_phrase} \n")
+			logger.info(f"Real: {italian_real_phrase} \n")
+			logger.info("--------------- FRENCH: ")
+			logger.info(f"Generated: {french_fake_phrase} \n")
+			logger.info(f"Real: {french_real_phrase} \n")
 
 		avg_val_loss = total_val_loss / len(val_loader)
 		val_losses.append(avg_val_loss)

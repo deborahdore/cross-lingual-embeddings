@@ -69,19 +69,23 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 	itos_it = vocab_it.get_itos()
 	itos_fr = vocab_fr.get_itos()
 
-	for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
-		hidden_fr = encoder_fr.init_hidden(batch_size, device)
-		hidden_it = encoder_it.init_hidden(batch_size, device)
+	hidden_fr = encoder_fr.init_hidden(batch_size, device)
+	hidden_it = encoder_it.init_hidden(batch_size, device)
 
+	for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
 		with torch.no_grad():
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
-			output_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-			output_it, hidden_it = encoder_it(input_it, hidden_it)
+			# computing embeddings from encoders
+			_, hidden_fr = encoder_fr(input_fr, hidden_fr)
+			_, hidden_it = encoder_it(input_it, hidden_it)
 
-			output_it, _ = decoder_it(input_it, hidden_fr, teacher_forcing=False)
-			output_fr, _ = decoder_fr(input_fr, hidden_it, teacher_forcing=False)
+			output_it = decoder_it(input_fr, hidden_fr)
+			output_fr = decoder_fr(input_it, hidden_it)
+
+			output_it = torch.nn.functional.pad(output_it, (0, 0, 0, input_it.shape[1] - output_it.shape[1], 0, 0))
+			output_fr = torch.nn.functional.pad(output_fr, (0, 0, 0, input_fr.shape[1] - output_fr.shape[1], 0, 0))
 
 			# get indexes
 			output_it = output_it.argmax(dim=-1).squeeze().to(device)
