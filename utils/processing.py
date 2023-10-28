@@ -113,3 +113,10 @@ def process_dataset(aligned_file: str, processed_file: str, plot_file: str):
 	write_df_to_file(final_corpus, processed_file)
 
 	return final_corpus
+
+
+def get_until_eos(phrase, vocab):
+	eos = vocab['<eos>']
+	if eos in phrase:
+		phrase = phrase[:phrase.index(eos)]
+	return phrase

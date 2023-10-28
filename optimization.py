@@ -39,6 +39,7 @@ def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir:
 
 	try:
 		ray.init()
+		corpus = ray.put(corpus)
 		result = tune.run(partial(train_autoencoder,
 								  corpus=corpus,
 								  model_config_file=model_config_file,

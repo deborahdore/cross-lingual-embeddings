@@ -49,7 +49,7 @@ def split_dataset(corpus: pd.DataFrame, batch_size: int) -> Tuple[DataLoader, Da
 	val_loader = DataLoader(val_dataset, batch_size=batch_size, drop_last=True, shuffle=False, collate_fn=collate_fn)
 
 	test_dataset = LSTMDataset(corpus_fr=test['french'], corpus_it=test['italian'], negative_sampling=False)
-	test_loader = DataLoader(test_dataset, batch_size=batch_size, drop_last=True, shuffle=False, collate_fn=collate_fn)
+	test_loader = DataLoader(test_dataset, batch_size=1, drop_last=True, shuffle=False, collate_fn=collate_fn)
 
 	return train_loader, val_loader, test_loader
 
@@ -83,7 +83,7 @@ def create_vocab(corpus: pd.DataFrame, language: str):
 
 	vocab.set_default_index(vocab['<unk>'])
 
-	tokenized_dataset = tokenized_dataset.apply(lambda x: x + ["<eos>"])
+	tokenized_dataset = tokenized_dataset.apply(lambda x: ["<sos>"] + x + ["<eos>"])
 
 	return tokenized_dataset, vocab
 

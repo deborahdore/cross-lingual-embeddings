@@ -15,6 +15,8 @@ class LSTMDataset(Dataset):
 
 		if self.negative_sampling and random.random() < 0.5:
 			new_index = random.randint(0, len(self.italian) - 1)
+			while new_index == index:
+				new_index = random.randint(0, len(self.italian) - 1)
 			return torch.Tensor(sample_fr), torch.Tensor(self.italian[new_index]), 0  # Negative
 
 		return torch.Tensor(sample_fr), torch.Tensor(self.italian[index]), 1  # Positive

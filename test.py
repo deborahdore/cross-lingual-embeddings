@@ -12,14 +12,13 @@ from torchtext.vocab import Vocab
 
 from dao.Dataset import LSTMDataset
 from dao.Model import Decoder, Encoder
+from utils.processing import get_until_eos
 from utils.utils import load_model
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
 def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_it: Vocab):
-	test_loader = DataLoader(test_loader.dataset, batch_size=1, shuffle=False)
-
 	logger.info(f"[generate] device: {device}")
 
 	# model parameters
@@ -39,21 +38,15 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 	# model loading
 	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
-	encoder_fr.to(device)
 
 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
-	encoder_it.to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, vocab_fr, num_layers, dec_dropout).to(
-		device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
-	decoder_fr.to(device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, vocab_it, num_layers, dec_dropout).to(
-		device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
-	decoder_it.to(device)
 
 	encoder_fr.eval()
 	encoder_it.eval()
@@ -77,19 +70,22 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
+			input_fr = input_fr.to(device)
+			input_it = input_it.to(device)
+
 			# computing embeddings from encoders
-			_, hidden_fr = encoder_fr(input_fr, hidden_fr)
-			_, hidden_it = encoder_it(input_it, hidden_it)
+			hidden_fr = encoder_fr(input_fr, hidden_fr)
+			hidden_it = encoder_it(input_it, hidden_it)
 
-			output_it = decoder_it(input_fr, hidden_fr)
-			output_fr = decoder_fr(input_it, hidden_it)
-
-			output_it = torch.nn.functional.pad(output_it, (0, 0, 0, input_it.shape[1] - output_it.shape[1], 0, 0))
-			output_fr = torch.nn.functional.pad(output_fr, (0, 0, 0, input_fr.shape[1] - output_fr.shape[1], 0, 0))
+			output_it = decoder_it(input_fr, hidden_it)
+			output_fr = decoder_fr(input_it, hidden_fr)
 
 			# get indexes
 			output_it = output_it.argmax(dim=-1).squeeze().to(device)
 			output_fr = output_fr.argmax(dim=-1).squeeze().to(device)
+
+			output_it = get_until_eos(output_it, vocab_it)
+			output_fr = get_until_eos(output_fr, vocab_fr)
 
 			italian_sentences.append([itos_it[int(i)] for i in output_it])
 			real_italian_sentences.append([itos_it[int(i)] for i in input_it.squeeze()])
@@ -134,21 +130,15 @@ def visualize_latent_space(config: {},
 	# model loading
 	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
-	encoder_fr.to(device)
 
 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
-	encoder_it.to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, vocab_fr, num_layers, dec_dropout).to(
-		device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
-	decoder_fr.to(device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, vocab_it, num_layers, dec_dropout).to(
-		device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
-	decoder_it.to(device)
 
 	encoder_fr.eval()
 	encoder_it.eval()

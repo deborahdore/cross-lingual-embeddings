@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import ray
 import torch.utils.data
 from loguru import logger
 from ray import train
@@ -15,6 +16,7 @@ from dao.Model import Decoder, Encoder
 from test import generate
 from utils.dataset import prepare_dataset
 from utils.loss import contrastive_loss
+from utils.processing import get_until_eos
 from utils.utils import save_model, save_plot, write_json
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -31,6 +33,9 @@ def train_autoencoder(config,
 					  study_result_dir: str,
 					  optimize: bool = False,
 					  ablation_study: bool = False):
+	if optimize:
+		corpus = ray.get(corpus)
+
 	train_loader, val_loader, test_loader = prepare_dataset(corpus, model_config_file, vocab_fr, vocab_it, config)
 
 	logger.info(f"[train] device: {device}")
@@ -62,11 +67,9 @@ def train_autoencoder(config,
 
 	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, vocab_fr, num_layers, dec_dropout).to(
-		device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, vocab_it, num_layers, dec_dropout).to(
-		device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
 	# optimizer
 	parameters = list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(decoder_it.parameters()) + list(
@@ -110,11 +113,8 @@ def train_autoencoder(config,
 				input_it = input_it.to(device)
 
 				# computing embeddings from encoders
-				output_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-				output_it, hidden_it = encoder_it(input_it, hidden_it)
-
-				hidden_it = decoder_it.detach_hidden(hidden_it)
-				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
+				hidden_fr = encoder_fr(input_fr, hidden_fr)
+				hidden_it = encoder_it(input_it, hidden_it)
 
 				# constrastive loss with label
 				cl_loss = contrastive_loss(hidden_fr[0][-1], hidden_it[0][-1], label=label, device=device)
@@ -122,8 +122,8 @@ def train_autoencoder(config,
 				output_it = decoder_it(input_it, hidden_it)
 				output_fr = decoder_fr(input_fr, hidden_fr)
 
-				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it), input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr), input_fr.reshape(-1).long())
+				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab_it), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab_fr), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
@@ -131,14 +131,16 @@ def train_autoencoder(config,
 
 				loss.backward()
 
-				# torch.nn.utils.clip_grad_norm_(parameters, 0.25)
+				torch.nn.utils.clip_grad_norm_(parameters, 0.25)
 
 				optimizer.step()
 
 				total_train_loss += loss.item()
 
-				pbar.set_postfix({"Train Loss": loss.item()})
+				hidden_it = decoder_it.detach_hidden(hidden_it)
+				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
 
+				pbar.set_postfix({"Train Loss": loss.item()})
 				pbar.update(1)
 
 		# optimize learning rate
@@ -165,37 +167,68 @@ def train_autoencoder(config,
 		hidden_it = encoder_it.init_hidden(batch_size, device)
 
 		with torch.no_grad():
-			# test translation
 			for (input_fr, input_it, label) in val_loader:
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 
 				# computing embeddings from encoders
-				_, hidden_fr = encoder_fr(input_fr, hidden_fr)
-				_, hidden_it = encoder_it(input_it, hidden_it)
+				hidden_fr = encoder_fr(input_fr, hidden_fr)
+				hidden_it = encoder_it(input_it, hidden_it)
 
 				# constrastive loss with label
 				cl_loss = contrastive_loss(hidden_fr[0][-1], hidden_it[0][-1], label=label, device=device)
 
-				output_it = decoder_it(input_fr, hidden_fr)  # todo test without hidden, test with original hidden
-				output_fr = decoder_fr(input_it, hidden_it)
+				output_it = decoder_it(input_fr, hidden_it)
+				output_fr = decoder_fr(input_it, hidden_fr)
 
-				output_it = torch.nn.functional.pad(output_it, (0, 0, 0, input_it.shape[1] - output_it.shape[1], 0, 0))
-				output_fr = torch.nn.functional.pad(output_fr, (0, 0, 0, input_fr.shape[1] - output_fr.shape[1], 0, 0))
+				if output_it.shape[1] > input_it.shape[1]:
+					output_it = output_it[:, :input_it.shape[1], :]
+				else:
+					output_it = torch.nn.functional.pad(output_it,
+														(0, 0, 0, input_it.shape[1] - output_it.shape[1], 0, 0))
 
-				reconstruction_loss = loss_fn(output_it.view(-1, len_vocab_it), input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.view(-1, len_vocab_fr), input_fr.reshape(-1).long())
+				if output_fr.shape[1] > input_fr.shape[1]:
+					output_fr = output_fr[:, :input_fr.shape[1], :]
+				else:
+					output_fr = torch.nn.functional.pad(output_fr,
+														(0, 0, 0, input_fr.shape[1] - output_fr.shape[1], 0, 0))
+
+				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab_it), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab_fr), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
 				total_val_loss += loss.item()
 
-			num = random.randint(0, batch_size)
-			french_real_phrase = " ".join([itos_fr[int(i)] for i in input_fr[num].squeeze()[:-1]])
-			italian_real_phrase = " ".join([itos_it[int(i)] for i in input_it[num].squeeze()[:-1]])
+			# --------------- GET AN EXAMPLE --------------- #
+			num = random.randint(0, batch_size - 1)
 
-			french_fake_phrase = " ".join([itos_fr[int(i)] for i in output_fr.argmax(dim=-1)[num].squeeze()[:-1]])
-			italian_fake_phrase = " ".join([itos_it[int(i)] for i in output_it.argmax(dim=-1)[num].squeeze()[:-1]])
+			input_fr, input_it, label = next(iter(val_loader))
+			input_fr = input_fr.to(device)
+			input_it = input_it.to(device)
+
+			# computing embeddings from encoders
+
+			output_it = decoder_it(input_fr, encoder_it(input_it, None))
+			output_fr = decoder_fr(input_it, encoder_fr(input_fr, None))
+
+			input_fr = input_fr[num].squeeze().tolist()
+			input_it = input_it[num].squeeze().tolist()
+
+			input_it = get_until_eos(input_it, vocab_it)
+			input_fr = get_until_eos(input_fr, vocab_fr)
+
+			french_real_phrase = " ".join([itos_fr[int(i)] for i in input_fr[1:]])
+			italian_real_phrase = " ".join([itos_it[int(i)] for i in input_it[1:]])
+
+			output_fr = output_fr.argmax(dim=-1)[num].squeeze().tolist()
+			output_it = output_it.argmax(dim=-1)[num].squeeze().tolist()
+
+			output_it = get_until_eos(output_it, vocab_it)
+			output_fr = get_until_eos(output_fr, vocab_fr)
+
+			french_fake_phrase = " ".join([itos_fr[int(i)] for i in output_fr[1:]])
+			italian_fake_phrase = " ".join([itos_it[int(i)] for i in output_it[1:]])
 
 			logger.info("--------------- ITALIAN: ")
 			logger.info(f"Generated: {italian_fake_phrase} \n")
@@ -203,6 +236,8 @@ def train_autoencoder(config,
 			logger.info("--------------- FRENCH: ")
 			logger.info(f"Generated: {french_fake_phrase} \n")
 			logger.info(f"Real: {french_real_phrase} \n")
+
+		# --------------- --------------- --------------- #
 
 		avg_val_loss = total_val_loss / len(val_loader)
 		val_losses.append(avg_val_loss)

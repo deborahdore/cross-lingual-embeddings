@@ -9,7 +9,7 @@
     "lr": 0.01,
     "embedding_dim": 100,
     "hidden_dim": 64,
-    "hidden_dim2": 128,
+    "hidden_dim2": 256,
     "num_layers": 2,
     "enc_dropout": 0.2,
     "dec_dropout": 0.2,
