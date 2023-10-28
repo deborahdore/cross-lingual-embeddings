@@ -12,13 +12,12 @@ from train import train_autoencoder
 from utils.utils import write_json
 
 
-def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir: str, vocab_fr: Vocab, vocab_it: Vocab):
+def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir: str, vocab: Vocab):
 	logger.info("[optimization] starting optimization")
 
 	# create configuration to try out
 	config = {
-		"len_vocab_it" : 30004,
-		"len_vocab_fr" : 30004,
+		"len_vocab"    : len(vocab),
 		"output_dim_it": 100,
 		"output_dim_fr": 100,
 		"num_epochs"   : 200,
@@ -42,9 +41,7 @@ def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir:
 		corpus = ray.put(corpus)
 		result = tune.run(partial(train_autoencoder,
 								  corpus=corpus,
-								  model_config_file=model_config_file,
-								  vocab_fr=vocab_fr,
-								  vocab_it=vocab_it,
+								  vocab=vocab,
 								  model_file=model_file,
 								  plot_file=plot_file,
 								  study_result_dir=study_result_dir,
@@ -59,15 +56,7 @@ def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir:
 		logger.info(f"Best trial config: {best_trial.config}")
 		write_json(best_trial.config, best_model_config_file)
 
-		train_autoencoder(best_trial.config,
-						  corpus,
-						  model_config_file,
-						  vocab_fr,
-						  vocab_it,
-						  model_file,
-						  plot_file,
-						  study_result_dir,
-						  optimize=False)
+		train_autoencoder(best_trial.config, corpus, vocab, model_file, plot_file, study_result_dir, optimize=False)
 
 	finally:
 		ray.shutdown()

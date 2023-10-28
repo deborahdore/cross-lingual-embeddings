@@ -40,8 +40,7 @@ def parse_command_line():
 	return generate, optimize, ablation
 
 
-if __name__ == '__main__':
-
+def main():
 	if len(sys.argv) < 5:
 		logger.error("[main] missing arguments from command line")
 		raise Exception("missing arguments from command line")
@@ -51,6 +50,7 @@ if __name__ == '__main__':
 	if generate_param:
 
 		# download_from_url(download_corpus.format(lang="it"), dataset_dir, "it")
+		# download_from_url(download_corpus.format(lang="de"), dataset_dir, "de")
 		# download_from_url(download_corpus.format(lang="fr"), dataset_dir, "fr")
 
 		it_file = read_file(lang_file.format(lang="it"))
@@ -68,12 +68,11 @@ if __name__ == '__main__':
 	else:
 		corpus = read_file_to_df(processed_file)
 
-	tokenized_dataset_fr, vocab_fr = create_vocab(corpus['french'], "fr_core_news_sm")
-	tokenized_dataset_it, vocab_it = create_vocab(corpus['italian'], "it_core_news_sm")
+	tokenized_dataset_fr, tokenized_dataset_it, vocab = create_vocab(corpus)
 
 	corpus_tokenized = pd.DataFrame({
-		'french' : sequence2index(tokenized_dataset_fr, vocab_fr),
-		'italian': sequence2index(tokenized_dataset_it, vocab_it)})
+		'french' : sequence2index(tokenized_dataset_fr, vocab),
+		'italian': sequence2index(tokenized_dataset_it, vocab)})
 
 	corpus_4_model_training, corpus_4_testing = train_test_split(corpus_tokenized, test_size=0.1)
 	corpus_4_model_training = corpus_4_model_training.reset_index(drop=True)
@@ -81,25 +80,21 @@ if __name__ == '__main__':
 
 	if optimize_param:
 		# find optimal hyperparameters
-		optimization(corpus_4_model_training, model_config_file, study_result_dir, vocab_fr, vocab_it)
+		optimization(corpus_4_model_training, model_config_file, study_result_dir, vocab)
 	elif ablation_study_param:
-		ablation_study(corpus_4_model_training,
-					   model_config_file,
-					   vocab_fr,
-					   vocab_it,
-					   model_file,
-					   plot_file,
-					   study_result_dir, )
+		ablation_study(corpus_4_model_training, model_config_file, vocab, model_file, plot_file, study_result_dir)
 	else:
 		# normal training
 		config = read_json(model_config_file)
 		train_autoencoder(config,
 						  corpus_4_model_training,
-						  model_config_file,
-						  vocab_fr,
-						  vocab_it,
+						  vocab,
 						  model_file,
 						  plot_file,
 						  study_result_dir,
 						  optimize=False)
-		visualize_latent_space(config, corpus_4_testing, model_file, plot_file, vocab_fr, vocab_it)
+		visualize_latent_space(config, corpus_4_testing, model_file, plot_file, vocab)
+
+
+if __name__ == '__main__':
+	main()

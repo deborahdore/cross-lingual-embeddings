@@ -62,16 +62,17 @@ def remove_outliers(df: pd.DataFrame):
 		words = sentence.split()
 		return len(words)
 
-	df['french_word_count'] = df['french'].apply(count_words)
-	df['italian_word_count'] = df['italian'].apply(count_words)
+	cols = df.columns.values
+
+	df['l1_word_count'] = df[cols[0]].apply(count_words)
+	df['l2_word_count'] = df[cols[1]].apply(count_words)
 
 	# Filter out rows where either French or Italian sentences have more than 100 words
 	# Filter out rows where either French or Italian sentences have less than 10 words
-	filtered_df = df[
-		(df['french_word_count'] <= 100) & (df['italian_word_count'] <= 100) & (df['french_word_count'] >= 10) & (
-				df['italian_word_count'] >= 10)].copy()
+	filtered_df = df[(df['l1_word_count'] <= 100) & (df['l2_word_count'] <= 100) & (df['l1_word_count'] >= 10) & (
+			df['l2_word_count'] >= 10)].copy()
 
-	filtered_df.drop(['french_word_count', 'italian_word_count'], axis=1, inplace=True)
+	filtered_df.drop(['l1_word_count', 'l2_word_count'], axis=1, inplace=True)
 
 	return filtered_df
 

@@ -4,12 +4,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import ray
 import torch.utils.data
 from loguru import logger
 from ray import train
 from torch.nn import NLLLoss
+from torchtext.vocab import Vocab
 from tqdm import tqdm
 
 from dao.Model import Decoder, Encoder
@@ -20,14 +20,11 @@ from utils.processing import get_until_eos
 from utils.utils import save_model, save_plot, write_json
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-torch.manual_seed(123)
 
 
-def train_autoencoder(config,
-					  corpus: pd.DataFrame,
-					  model_config_file: str,
-					  vocab_fr: Any,
-					  vocab_it: Any,
+def train_autoencoder(config: dict,
+					  corpus: Any,
+					  vocab: Vocab,
 					  model_file: str,
 					  plot_file: str,
 					  study_result_dir: str,
@@ -36,12 +33,13 @@ def train_autoencoder(config,
 	if optimize:
 		corpus = ray.get(corpus)
 
-	train_loader, val_loader, test_loader = prepare_dataset(corpus, model_config_file, vocab_fr, vocab_it, config)
+	train_loader, val_loader, test_loader = prepare_dataset(corpus, config)
 
 	logger.info(f"[train] device: {device}")
 
 	# training parameters
 	batch_size = config['batch_size']
+
 	patience = config['patience']
 	early_stop_counter = 0
 	best_val_loss = float('inf')
@@ -49,8 +47,7 @@ def train_autoencoder(config,
 	lr = config['lr']
 
 	# model parameters
-	len_vocab_it = config['len_vocab_it']
-	len_vocab_fr = config['len_vocab_fr']
+	len_vocab = len(vocab)  # config['len_vocab']
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
@@ -63,19 +60,20 @@ def train_autoencoder(config,
 	beta = config['beta']
 
 	# model instantiation
-	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
+	encoder_fr = Encoder(len_vocab, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 
-	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
+	encoder_it = Encoder(len_vocab, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
 
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
+	decoder_fr = Decoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
+	decoder_it = Decoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
 	# optimizer
 	parameters = list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(decoder_it.parameters()) + list(
 		decoder_fr.parameters())
 
-	optimizer = torch.optim.SGD(params=parameters, lr=lr, momentum=0.9)
+	# optimizer = torch.optim.SGD(params=parameters, lr=lr, momentum=0.9)
+	optimizer = torch.optim.Adam(params=parameters, lr=lr)
 	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
 
 	train_losses = []
@@ -90,8 +88,7 @@ def train_autoencoder(config,
 	# wandb.init(project="cross-lingual-it-fr-embeddings-3-loss",
 	# 		   config=config}
 
-	itos_it = vocab_it.get_itos()
-	itos_fr = vocab_fr.get_itos()
+	itos = vocab.get_itos()
 
 	for epoch in range(num_epochs):
 
@@ -122,8 +119,8 @@ def train_autoencoder(config,
 				output_it = decoder_it(input_it, hidden_it)
 				output_fr = decoder_fr(input_fr, hidden_fr)
 
-				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab_it), input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab_fr), input_fr.reshape(-1).long())
+				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
@@ -193,8 +190,8 @@ def train_autoencoder(config,
 					output_fr = torch.nn.functional.pad(output_fr,
 														(0, 0, 0, input_fr.shape[1] - output_fr.shape[1], 0, 0))
 
-				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab_it), input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab_fr), input_fr.reshape(-1).long())
+				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
@@ -215,20 +212,20 @@ def train_autoencoder(config,
 			input_fr = input_fr[num].squeeze().tolist()
 			input_it = input_it[num].squeeze().tolist()
 
-			input_it = get_until_eos(input_it, vocab_it)
-			input_fr = get_until_eos(input_fr, vocab_fr)
+			input_it = get_until_eos(input_it, vocab)
+			input_fr = get_until_eos(input_fr, vocab)
 
-			french_real_phrase = " ".join([itos_fr[int(i)] for i in input_fr[1:]])
-			italian_real_phrase = " ".join([itos_it[int(i)] for i in input_it[1:]])
+			french_real_phrase = " ".join([itos[int(i)] for i in input_fr[1:]])
+			italian_real_phrase = " ".join([itos[int(i)] for i in input_it[1:]])
 
 			output_fr = output_fr.argmax(dim=-1)[num].squeeze().tolist()
 			output_it = output_it.argmax(dim=-1)[num].squeeze().tolist()
 
-			output_it = get_until_eos(output_it, vocab_it)
-			output_fr = get_until_eos(output_fr, vocab_fr)
+			output_it = get_until_eos(output_it, vocab)
+			output_fr = get_until_eos(output_fr, vocab)
 
-			french_fake_phrase = " ".join([itos_fr[int(i)] for i in output_fr[1:]])
-			italian_fake_phrase = " ".join([itos_it[int(i)] for i in output_it[1:]])
+			french_fake_phrase = " ".join([itos[int(i)] for i in output_fr[1:]])
+			italian_fake_phrase = " ".join([itos[int(i)] for i in output_it[1:]])
 
 			logger.info("--------------- ITALIAN: ")
 			logger.info(f"Generated: {italian_fake_phrase} \n")
@@ -269,7 +266,7 @@ def train_autoencoder(config,
 
 	logger.info("[train] Training complete.")
 
-	bleu_score_fr, bleu_score_it = generate(config, test_loader, model_file, vocab_fr, vocab_it)
+	bleu_score_fr, bleu_score_it = generate(config, test_loader, model_file, vocab)
 
 	if ablation_study:
 		trial_datetime = datetime.now()
