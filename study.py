@@ -6,7 +6,7 @@ from torchtext.vocab import Vocab
 from config.path import eng_lang_file, lang_file
 from train import train_autoencoder
 from utils.dataset import sequence2index
-from utils.processing import nlp_pipeline, remove_outliers
+from utils.processing import nlp_pipeline
 from utils.utils import read_file, read_json
 
 

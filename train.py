@@ -86,7 +86,7 @@ def train_autoencoder(config: dict,
 	loss_fn = NLLLoss(ignore_index=0)
 
 	# init weight&biases feature
-	wandb.init(project="cross-lingual-it-fr-embeddings", config=config)
+	wandb.init(project="cross-lingual-embeddings", config=config)
 
 	itos = vocab.get_itos()
 
@@ -99,14 +99,14 @@ def train_autoencoder(config: dict,
 
 		total_train_loss = 0.0
 
-		hidden_fr = encoder_fr.init_hidden(batch_size, device)
-		hidden_it = encoder_it.init_hidden(batch_size, device)
-
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			# train each encoder-decoder on their language
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
+
+				hidden_fr = encoder_fr.init_hidden(batch_size, device)
+				hidden_it = encoder_it.init_hidden(batch_size, device)
 
 				optimizer.zero_grad()
 
@@ -127,14 +127,14 @@ def train_autoencoder(config: dict,
 
 				loss.backward()
 
-				# torch.nn.utils.clip_grad_norm_(parameters, 0.25)
+				torch.nn.utils.clip_grad_norm_(parameters, 1)
 
 				optimizer.step()
 
 				total_train_loss += loss.item()
 
-				hidden_fr = encoder_fr.detach_hidden(hidden_fr)
-				hidden_it = encoder_it.detach_hidden(hidden_it)
+				# hidden_fr = encoder_fr.detach_hidden(hidden_fr)
+				# hidden_it = encoder_it.detach_hidden(hidden_it)
 
 				pbar.set_postfix({"Train Loss": loss.item()})
 				pbar.update(1)
@@ -159,13 +159,13 @@ def train_autoencoder(config: dict,
 
 		total_val_loss = 0.0
 
-		hidden_fr = encoder_fr.init_hidden(batch_size, device)
-		hidden_it = encoder_it.init_hidden(batch_size, device)
-
 		with torch.no_grad():
 			for (input_fr, input_it, label) in val_loader:
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
+
+				hidden_fr = encoder_fr.init_hidden(batch_size, device)
+				hidden_it = encoder_it.init_hidden(batch_size, device)
 
 				# computing embeddings from encoders
 				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
