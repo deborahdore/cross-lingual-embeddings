@@ -6,6 +6,7 @@ from typing import Any
 
 import ray
 import torch.utils.data
+import wandb
 from loguru import logger
 from ray import train
 from torch.nn import NLLLoss
@@ -85,8 +86,7 @@ def train_autoencoder(config: dict,
 	loss_fn = NLLLoss(ignore_index=0)
 
 	# init weight&biases feature
-	# wandb.init(project="cross-lingual-it-fr-embeddings-3-loss",
-	# 		   config=config}
+	wandb.init(project="cross-lingual-it-fr-embeddings", config=config)
 
 	itos = vocab.get_itos()
 
@@ -104,7 +104,6 @@ def train_autoencoder(config: dict,
 
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			# train each encoder-decoder on their language
-
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
@@ -128,7 +127,7 @@ def train_autoencoder(config: dict,
 
 				loss.backward()
 
-				torch.nn.utils.clip_grad_norm_(parameters, 0.25)
+				# torch.nn.utils.clip_grad_norm_(parameters, 0.25)
 
 				optimizer.step()
 
@@ -151,7 +150,7 @@ def train_autoencoder(config: dict,
 					f"{reconstruction_loss.item():.20f}")
 
 		train_losses.append(avg_train_loss)
-		# wandb.log({"train/loss": avg_train_loss, "epoch": epoch + 1})
+		wandb.log({"train/loss": avg_train_loss, "epoch": epoch + 1})
 
 		encoder_fr.eval()
 		encoder_it.eval()
@@ -184,6 +183,11 @@ def train_autoencoder(config: dict,
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
 				total_val_loss += loss.item()
+
+			avg_val_loss = total_val_loss / len(val_loader)
+			val_losses.append(avg_val_loss)
+			wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
+			logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
 
 			# --------------- GET AN EXAMPLE --------------- #
 			num = random.randint(0, batch_size - 1)
@@ -223,23 +227,16 @@ def train_autoencoder(config: dict,
 
 		# --------------- --------------- --------------- #
 
-		avg_val_loss = total_val_loss / len(val_loader)
-		val_losses.append(avg_val_loss)
-		logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
-
 		if optimize:
 			train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})
-
-		# wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
 
 		if avg_val_loss < best_val_loss:
 			best_val_loss = avg_val_loss
 
-			# wandb.run.summary["best_loss"] = best_val_loss
+			wandb.run.summary["best_loss"] = best_val_loss
 
 			early_stop_counter = 0
 
-			# save best model
 			save_model(encoder_fr, file=model_file.format(type="encoder_fr"))
 			save_model(decoder_fr, file=model_file.format(type="decoder_fr"))
 			save_model(encoder_it, file=model_file.format(type="encoder_it"))
@@ -285,4 +282,4 @@ def train_autoencoder(config: dict,
 			  "learning rates through epochs",
 			  lr_epochs_file)
 
-# wandb.finish()
+	wandb.finish()

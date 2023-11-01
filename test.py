@@ -64,8 +64,8 @@ def generate(config, test_loader: Any, model_file: str, vocab: Vocab):
 			input_it = input_it.to(device)
 
 			# computing embeddings from encoders
-			embedding_fr, hidden_fr = encoder_fr(input_fr, encoder_fr.init_hidden(1, device))
-			embedding_it, hidden_it = encoder_it(input_it, encoder_it.init_hidden(1, device))
+			embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+			embedding_it, hidden_it = encoder_it(input_it, hidden_it)
 
 			output_it = decoder_it(embedding_fr, hidden_it)
 			output_fr = decoder_fr(embedding_it, hidden_fr)
