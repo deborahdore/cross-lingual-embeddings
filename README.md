@@ -69,6 +69,7 @@ reconstructing the original sentence in natural language more challenging.
 <img src="plot/fr_it_sentences_length.svg">
 
 ## **MODEL'S ARCHITECTURE**
+
 <img src="plot/architecture.svg" alt="Architecture">
 
 ## **LATENT SPACE PROJECTION**

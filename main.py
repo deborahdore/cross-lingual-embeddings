@@ -15,7 +15,6 @@ from config.path import (aligned_file,
 						 study_result_dir, )
 from optimization import optimization
 from study import ablation_study
-from test import visualize_latent_space
 from train import train_autoencoder
 from utils.dataset import create_vocab, sequence2index
 from utils.processing import align_dataset, process_dataset
@@ -80,7 +79,7 @@ def main():
 
 	if optimize_param:
 		# find optimal hyperparameters
-		optimization(corpus_4_model_training, model_config_file, study_result_dir, vocab)
+		optimization(corpus_4_model_training, study_result_dir, vocab)
 	elif ablation_study_param:
 		ablation_study(corpus_4_model_training, model_config_file, vocab, model_file, plot_file, study_result_dir)
 	else:
@@ -92,8 +91,8 @@ def main():
 						  model_file,
 						  plot_file,
 						  study_result_dir,
-						  optimize=False)
-		visualize_latent_space(config, corpus_4_testing, model_file, plot_file, vocab)
+						  optimize=False)  # visualize_latent_space(config, corpus_4_testing, model_file, plot_file,
+		# vocab)
 
 
 if __name__ == '__main__':

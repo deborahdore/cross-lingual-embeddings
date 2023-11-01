@@ -16,7 +16,7 @@ def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int
 	:return: The mean of the loss for each pair
 	:param device: device
 	"""
-	label = torch.Tensor(label).to(device)
+	label = torch.Tensor(label).unsqueeze(1).to(device)
 	dist = torch.nn.functional.pairwise_distance(x1, x2)
 	loss = label * torch.pow(dist, 2) + (1 - label) * torch.pow(torch.clamp(margin - dist, min=0.0, max=None), 2)
 	return torch.mean(loss)

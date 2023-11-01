@@ -60,9 +60,9 @@ def train_autoencoder(config: dict,
 	beta = config['beta']
 
 	# model instantiation
-	encoder_fr = Encoder(len_vocab, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
+	encoder_fr = Encoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
 
-	encoder_it = Encoder(len_vocab, embedding_dim, hidden_dim, num_layers, enc_dropout).to(device)
+	encoder_it = Encoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
 
 	decoder_fr = Decoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
@@ -73,7 +73,7 @@ def train_autoencoder(config: dict,
 		decoder_fr.parameters())
 
 	# optimizer = torch.optim.SGD(params=parameters, lr=lr, momentum=0.9)
-	optimizer = torch.optim.Adam(params=parameters, lr=lr)
+	optimizer = torch.optim.AdamW(params=parameters, lr=lr)
 	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
 
 	train_losses = []
@@ -109,22 +109,22 @@ def train_autoencoder(config: dict,
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 
+				optimizer.zero_grad()
+
 				# computing embeddings from encoders
-				hidden_fr = encoder_fr(input_fr, hidden_fr)
-				hidden_it = encoder_it(input_it, hidden_it)
+				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+				embedding_it, hidden_it = encoder_it(input_it, hidden_it)
 
 				# constrastive loss with label
-				cl_loss = contrastive_loss(hidden_fr[0][-1], hidden_it[0][-1], label=label, device=device)
+				cl_loss = contrastive_loss(embedding_it, embedding_fr, label=label, device=device)
 
-				output_it = decoder_it(input_it, hidden_it)
-				output_fr = decoder_fr(input_fr, hidden_fr)
+				output_it = decoder_it(embedding_it, hidden_it)
+				output_fr = decoder_fr(embedding_fr, hidden_fr)
 
 				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab), input_it.reshape(-1).long())
 				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
-
-				optimizer.zero_grad()
 
 				loss.backward()
 
@@ -134,8 +134,8 @@ def train_autoencoder(config: dict,
 
 				total_train_loss += loss.item()
 
-				hidden_it = decoder_it.detach_hidden(hidden_it)
-				hidden_fr = decoder_fr.detach_hidden(hidden_fr)
+				hidden_fr = encoder_fr.detach_hidden(hidden_fr)
+				hidden_it = encoder_it.detach_hidden(hidden_it)
 
 				pbar.set_postfix({"Train Loss": loss.item()})
 				pbar.update(1)
@@ -169,26 +169,14 @@ def train_autoencoder(config: dict,
 				input_it = input_it.to(device)
 
 				# computing embeddings from encoders
-				hidden_fr = encoder_fr(input_fr, hidden_fr)
-				hidden_it = encoder_it(input_it, hidden_it)
+				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+				embedding_it, hidden_it = encoder_it(input_it, hidden_it)
 
 				# constrastive loss with label
-				cl_loss = contrastive_loss(hidden_fr[0][-1], hidden_it[0][-1], label=label, device=device)
+				cl_loss = contrastive_loss(embedding_it, embedding_fr, label=label, device=device)
 
-				output_it = decoder_it(input_fr, hidden_it)
-				output_fr = decoder_fr(input_it, hidden_fr)
-
-				if output_it.shape[1] > input_it.shape[1]:
-					output_it = output_it[:, :input_it.shape[1], :]
-				else:
-					output_it = torch.nn.functional.pad(output_it,
-														(0, 0, 0, input_it.shape[1] - output_it.shape[1], 0, 0))
-
-				if output_fr.shape[1] > input_fr.shape[1]:
-					output_fr = output_fr[:, :input_fr.shape[1], :]
-				else:
-					output_fr = torch.nn.functional.pad(output_fr,
-														(0, 0, 0, input_fr.shape[1] - output_fr.shape[1], 0, 0))
+				output_it = decoder_it(embedding_it, hidden_it)
+				output_fr = decoder_fr(embedding_fr, hidden_fr)
 
 				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab), input_it.reshape(-1).long())
 				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab), input_fr.reshape(-1).long())
@@ -201,31 +189,30 @@ def train_autoencoder(config: dict,
 			num = random.randint(0, batch_size - 1)
 
 			input_fr, input_it, label = next(iter(val_loader))
-			input_fr = input_fr.to(device)
-			input_it = input_it.to(device)
 
-			# computing embeddings from encoders
+			input_fr = input_fr[num].unsqueeze(0).to(device)
+			input_it = input_it[num].unsqueeze(0).to(device)
 
-			output_it = decoder_it(input_fr, encoder_it(input_it, None))
-			output_fr = decoder_fr(input_it, encoder_fr(input_fr, None))
+			embedding_fr, hidden_fr = encoder_fr(input_fr, encoder_fr.init_hidden(1, device))
+			embedding_it, hidden_it = encoder_it(input_it, encoder_it.init_hidden(1, device))
 
-			input_fr = input_fr[num].squeeze().tolist()
-			input_it = input_it[num].squeeze().tolist()
+			input_it = get_until_eos(input_it.squeeze().tolist(), vocab)
+			input_fr = get_until_eos(input_fr.squeeze().tolist(), vocab)
 
-			input_it = get_until_eos(input_it, vocab)
-			input_fr = get_until_eos(input_fr, vocab)
+			french_real_phrase = " ".join([itos[int(i)] for i in input_fr])
+			italian_real_phrase = " ".join([itos[int(i)] for i in input_it])
 
-			french_real_phrase = " ".join([itos[int(i)] for i in input_fr[1:]])
-			italian_real_phrase = " ".join([itos[int(i)] for i in input_it[1:]])
+			output_it = decoder_it(embedding_fr, hidden_it)
+			output_fr = decoder_fr(embedding_it, hidden_fr)
 
-			output_fr = output_fr.argmax(dim=-1)[num].squeeze().tolist()
-			output_it = output_it.argmax(dim=-1)[num].squeeze().tolist()
+			output_fr = output_fr.argmax(dim=-1).squeeze().tolist()
+			output_it = output_it.argmax(dim=-1).squeeze().tolist()
 
 			output_it = get_until_eos(output_it, vocab)
 			output_fr = get_until_eos(output_fr, vocab)
 
-			french_fake_phrase = " ".join([itos[int(i)] for i in output_fr[1:]])
-			italian_fake_phrase = " ".join([itos[int(i)] for i in output_it[1:]])
+			french_fake_phrase = " ".join([itos[int(i)] for i in output_fr])
+			italian_fake_phrase = " ".join([itos[int(i)] for i in output_it])
 
 			logger.info("--------------- ITALIAN: ")
 			logger.info(f"Generated: {italian_fake_phrase} \n")

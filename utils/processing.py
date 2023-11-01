@@ -69,7 +69,7 @@ def remove_outliers(df: pd.DataFrame):
 
 	# Filter out rows where either French or Italian sentences have more than 100 words
 	# Filter out rows where either French or Italian sentences have less than 10 words
-	filtered_df = df[(df['l1_word_count'] <= 100) & (df['l2_word_count'] <= 100) & (df['l1_word_count'] >= 10) & (
+	filtered_df = df[(df['l1_word_count'] < 80) & (df['l2_word_count'] < 80) & (df['l1_word_count'] >= 10) & (
 			df['l2_word_count'] >= 10)].copy()
 
 	filtered_df.drop(['l1_word_count', 'l2_word_count'], axis=1, inplace=True)
@@ -95,7 +95,7 @@ def eda(corpus: pd.DataFrame, plot_file: str):
 
 def process_dataset(aligned_file: str, processed_file: str, plot_file: str):
 	logger.info("[process_dataset] processing dataset")
-	original_corpus = read_file_to_df(aligned_file)
+	original_corpus = read_file_to_df(aligned_file).sample(frac=0.4)
 	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop=True)
 
 	# exploratory data analysis

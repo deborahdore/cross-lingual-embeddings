@@ -1,14 +1,14 @@
 import random
 
 import torch
-from torch.utils.data import Dataset
 
 
-class LSTMDataset(Dataset):
-	def __init__(self, corpus_fr, corpus_it, negative_sampling: bool = True):
+class LSTMDataset(torch.utils.data.Dataset):
+	def __init__(self, corpus_fr, corpus_it, negative_sampling: bool = True, max_len: int = 100):
 		self.french = corpus_fr
 		self.italian = corpus_it
 		self.negative_sampling = negative_sampling
+		self.max_len = max_len
 
 	def __getitem__(self, index):
 		sample_fr = self.french[index]
@@ -17,18 +17,13 @@ class LSTMDataset(Dataset):
 			new_index = random.randint(0, len(self.italian) - 1)
 			while new_index == index:
 				new_index = random.randint(0, len(self.italian) - 1)
-			return torch.Tensor(sample_fr), torch.Tensor(self.italian[new_index]), 0  # Negative
+			return self.pad_and_to_tensor_elem(sample_fr), self.pad_and_to_tensor_elem(self.italian[new_index]), 0
 
-		return torch.Tensor(sample_fr), torch.Tensor(self.italian[index]), 1  # Positive
+		return self.pad_and_to_tensor_elem(sample_fr), self.pad_and_to_tensor_elem(self.italian[index]), 1  # Positive
 
 	def __len__(self):
 		return len(self.french)
 
-	def get_max_len_it(self):
-		return len(max(self.italian, key=len))
-
-	def get_max_len_fr(self):
-		return len(max(self.french, key=len))
-
-	def set_negative_sampling(self, negative_sampling):
-		self.negative_sampling = negative_sampling
+	def pad_and_to_tensor_elem(self, x):
+		x = x + [0] * (self.max_len - len(x))
+		return torch.Tensor(x)

@@ -12,7 +12,7 @@ from train import train_autoencoder
 from utils.utils import write_json
 
 
-def optimization(corpus: pd.DataFrame, model_config_file: str, study_result_dir: str, vocab: Vocab):
+def optimization(corpus: pd.DataFrame, study_result_dir: str, vocab: Vocab):
 	logger.info("[optimization] starting optimization")
 
 	# create configuration to try out
