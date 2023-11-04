@@ -6,13 +6,13 @@ from typing import Any
 
 import ray
 import torch.utils.data
-import wandb
 from loguru import logger
 from ray import train
 from torch.nn import NLLLoss
 from torchtext.vocab import Vocab
 from tqdm import tqdm
 
+import wandb
 from dao.Model import Decoder, Encoder
 from test import generate
 from utils.dataset import prepare_dataset
@@ -21,6 +21,43 @@ from utils.processing import get_until_eos
 from utils.utils import save_model, save_plot, write_json
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+
+def get_an_example(encoder_fr, decoder_it, vocab, val_loader, batch_size):
+	with torch.no_grad():
+		itos = vocab.get_itos()
+
+		num = random.randint(0, batch_size - 1)
+
+		input_fr, input_it, label = next(iter(val_loader))
+
+		input_it = input_it[num].unsqueeze(0).to(device)
+
+		hidden_fr = encoder_fr.init_hidden(1, device)
+
+		embedding_fr, hidden_fr = encoder_fr(input_fr[num].unsqueeze(0).to(device), hidden_fr)
+
+		italian_real_phrase = " ".join([itos[int(i)] for i in get_until_eos(input_it.squeeze().tolist(), vocab)])
+
+		logger.info("--------------- ITALIAN with hidden_fr state: ")
+
+		output_it = decoder_it(embedding_fr, hidden_fr)  # todo
+		output_it = output_it.argmax(dim=-1).squeeze().tolist()
+
+		italian_fake_phrase = " ".join([itos[int(i)] for i in get_until_eos(output_it, vocab)])
+
+		logger.info(f"Generated: {italian_fake_phrase} \n")
+		logger.info(f"Real: {italian_real_phrase} \n")
+
+		logger.info("--------------- ITALIAN with no hidden state: ")
+
+		output_it = decoder_it(embedding_fr, None)  # todo
+		output_it = output_it.argmax(dim=-1).squeeze().tolist()
+
+		italian_fake_phrase = " ".join([itos[int(i)] for i in get_until_eos(output_it, vocab)])
+
+		logger.info(f"Generated: {italian_fake_phrase} \n")
+		logger.info(f"Real: {italian_real_phrase} \n")
 
 
 def train_autoencoder(config: dict,
@@ -33,6 +70,9 @@ def train_autoencoder(config: dict,
 					  ablation_study: bool = False):
 	if optimize:
 		corpus = ray.get(corpus)
+
+	# init weight&biases feature
+	wandb.init(project="cross-lingual-embeddings", config=config)
 
 	train_loader, val_loader, test_loader = prepare_dataset(corpus, config)
 
@@ -48,7 +88,7 @@ def train_autoencoder(config: dict,
 	lr = config['lr']
 
 	# model parameters
-	len_vocab = len(vocab)  # config['len_vocab']
+	len_vocab = len(vocab)
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
@@ -62,18 +102,18 @@ def train_autoencoder(config: dict,
 
 	# model instantiation
 	encoder_fr = Encoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-
 	encoder_it = Encoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-
 	decoder_fr = Decoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
-
 	decoder_it = Decoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
-	# optimizer
+	wandb.watch(encoder_fr)
+	wandb.watch(encoder_it)
+	wandb.watch(decoder_it)
+	wandb.watch(decoder_fr)
+
+	# optimizer + scheduler
 	parameters = list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(decoder_it.parameters()) + list(
 		decoder_fr.parameters())
-
-	# optimizer = torch.optim.SGD(params=parameters, lr=lr, momentum=0.9)
 	optimizer = torch.optim.AdamW(params=parameters, lr=lr)
 	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
 
@@ -84,11 +124,6 @@ def train_autoencoder(config: dict,
 	avg_val_loss = 0.0
 
 	loss_fn = NLLLoss(ignore_index=0)
-
-	# init weight&biases feature
-	wandb.init(project="cross-lingual-embeddings", config=config)
-
-	itos = vocab.get_itos()
 
 	for epoch in range(num_epochs):
 
@@ -102,13 +137,13 @@ def train_autoencoder(config: dict,
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			# train each encoder-decoder on their language
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
+				optimizer.zero_grad()
+
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
 
 				hidden_fr = encoder_fr.init_hidden(batch_size, device)
 				hidden_it = encoder_it.init_hidden(batch_size, device)
-
-				optimizer.zero_grad()
 
 				# computing embeddings from encoders
 				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
@@ -127,29 +162,23 @@ def train_autoencoder(config: dict,
 
 				loss.backward()
 
-				torch.nn.utils.clip_grad_norm_(parameters, 1)
+				torch.nn.utils.clip_grad_norm_(parameters, 1.0)
 
 				optimizer.step()
 
 				total_train_loss += loss.item()
 
-				# hidden_fr = encoder_fr.detach_hidden(hidden_fr)
-				# hidden_it = encoder_it.detach_hidden(hidden_it)
-
 				pbar.set_postfix({"Train Loss": loss.item()})
 				pbar.update(1)
 
-		# optimize learning rate
+		# scheduler's step
 		learning_rates.append(optimizer.param_groups[0]["lr"])
 		scheduler.step()
 
+		# save avg train loss
 		avg_train_loss = total_train_loss / len(train_loader)
-		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
-		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Last Contrastive Loss: {cl_loss.item():.20f}")
-		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Last Reconstruction Loss: "
-					f"{reconstruction_loss.item():.20f}")
-
 		train_losses.append(avg_train_loss)
+		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
 		wandb.log({"train/loss": avg_train_loss, "epoch": epoch + 1})
 
 		encoder_fr.eval()
@@ -184,48 +213,14 @@ def train_autoencoder(config: dict,
 
 				total_val_loss += loss.item()
 
+			# display val loss
 			avg_val_loss = total_val_loss / len(val_loader)
 			val_losses.append(avg_val_loss)
 			wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
 			logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
 
 			# --------------- GET AN EXAMPLE --------------- #
-			num = random.randint(0, batch_size - 1)
-
-			input_fr, input_it, label = next(iter(val_loader))
-
-			input_fr = input_fr[num].unsqueeze(0).to(device)
-			input_it = input_it[num].unsqueeze(0).to(device)
-
-			embedding_fr, hidden_fr = encoder_fr(input_fr, encoder_fr.init_hidden(1, device))
-			embedding_it, hidden_it = encoder_it(input_it, encoder_it.init_hidden(1, device))
-
-			input_it = get_until_eos(input_it.squeeze().tolist(), vocab)
-			input_fr = get_until_eos(input_fr.squeeze().tolist(), vocab)
-
-			french_real_phrase = " ".join([itos[int(i)] for i in input_fr])
-			italian_real_phrase = " ".join([itos[int(i)] for i in input_it])
-
-			output_it = decoder_it(embedding_fr, hidden_it)
-			output_fr = decoder_fr(embedding_it, hidden_fr)
-
-			output_fr = output_fr.argmax(dim=-1).squeeze().tolist()
-			output_it = output_it.argmax(dim=-1).squeeze().tolist()
-
-			output_it = get_until_eos(output_it, vocab)
-			output_fr = get_until_eos(output_fr, vocab)
-
-			french_fake_phrase = " ".join([itos[int(i)] for i in output_fr])
-			italian_fake_phrase = " ".join([itos[int(i)] for i in output_it])
-
-			logger.info("--------------- ITALIAN: ")
-			logger.info(f"Generated: {italian_fake_phrase} \n")
-			logger.info(f"Real: {italian_real_phrase} \n")
-			logger.info("--------------- FRENCH: ")
-			logger.info(f"Generated: {french_fake_phrase} \n")
-			logger.info(f"Real: {french_real_phrase} \n")
-
-		# --------------- --------------- --------------- #
+			get_an_example(encoder_fr, decoder_it, vocab, val_loader, batch_size)
 
 		if optimize:
 			train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})

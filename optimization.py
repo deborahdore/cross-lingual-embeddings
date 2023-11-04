@@ -17,10 +17,7 @@ def optimization(corpus: pd.DataFrame, study_result_dir: str, vocab: Vocab):
 
 	# create configuration to try out
 	config = {
-		"len_vocab"    : len(vocab),
-		"output_dim_it": 100,
-		"output_dim_fr": 100,
-		"num_epochs"   : 200,
+		"num_epochs"   : 100,
 		"patience"     : 10,
 		"batch_size"   : tune.choice([16, 32, 64, 128]),
 		"lr"           : tune.loguniform(1e-4, 1e-1),

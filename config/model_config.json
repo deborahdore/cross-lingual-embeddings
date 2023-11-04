@@ -1,9 +1,6 @@
 {
-  "len_vocab"    : 60003,
-  "output_dim_it": 107,
-  "output_dim_fr": 109,
   "num_epochs"   : 100,
-  "patience"     : 15,
+  "patience"     : 10,
   "batch_size"   : 32,
   "lr"           : 0.01,
   "embedding_dim": 100,

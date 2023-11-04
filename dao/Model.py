@@ -30,8 +30,8 @@ class Encoder(nn.Module):
 
 	def init_hidden(self, batch_size, device):
 		bidirectional = 2 if self.bidirectional == True else 1
-		hidden = torch.zeros(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
-		cell = torch.zeros(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
+		hidden = torch.randn(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
+		cell = torch.randn(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
 
 		return hidden, cell
 
@@ -74,8 +74,8 @@ class Decoder(nn.Module):
 
 	def init_hidden(self, batch_size, device):
 		bidirectional = 2 if self.bidirectional == True else 1
-		hidden = torch.zeros(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
-		cell = torch.zeros(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
+		hidden = torch.randn(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
+		cell = torch.randn(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
 
 		return hidden, cell
 
@@ -86,12 +86,11 @@ class Decoder(nn.Module):
 
 		for _ in range(self.max_len):
 			decoder_output, decoder_hidden = self.decoder(x.unsqueeze(1), decoder_hidden)
-			decoder_output = self.fc(decoder_output)
-			predicted_word = F.log_softmax(decoder_output, dim=-1)
-			decoded_sentence.append(predicted_word)
+			decoded_sentence.append(decoder_output)
 
-		stack = torch.stack(decoded_sentence, dim=-1).squeeze(1)
-		return stack.permute(0, 2, 1)
+		output = torch.stack(decoded_sentence, dim=-1).squeeze(1)
+		output = self.fc(output.permute(0, 2, 1))
+		return F.log_softmax(output, dim=-1)
 
 	def one_step_decoder(self, x, hidden):
 		embeds = self.embedder(x.long())

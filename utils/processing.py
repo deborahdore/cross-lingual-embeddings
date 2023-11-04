@@ -95,7 +95,7 @@ def eda(corpus: pd.DataFrame, plot_file: str):
 
 def process_dataset(aligned_file: str, processed_file: str, plot_file: str):
 	logger.info("[process_dataset] processing dataset")
-	original_corpus = read_file_to_df(aligned_file).sample(frac=0.4)
+	original_corpus = read_file_to_df(aligned_file)
 	original_corpus = original_corpus.dropna().drop_duplicates().reset_index(drop=True)
 
 	# exploratory data analysis

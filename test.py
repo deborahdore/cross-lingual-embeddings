@@ -24,7 +24,7 @@ def generate(config, test_loader: Any, model_file: str, vocab: Vocab):
 	# model parameters
 	batch_size = 1
 
-	len_vocab = config['len_vocab']
+	len_vocab = len(vocab)
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
@@ -55,39 +55,36 @@ def generate(config, test_loader: Any, model_file: str, vocab: Vocab):
 
 	itos = vocab.get_itos()
 
-	hidden_fr = encoder_fr.init_hidden(batch_size, device)
-	hidden_it = encoder_it.init_hidden(batch_size, device)
-
 	with torch.no_grad():
 		for batch_idx, (input_fr, input_it, label) in enumerate(test_loader):
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
-			# computing embeddings from encoders
-			embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-			embedding_it, hidden_it = encoder_it(input_it, hidden_it)
+			enc_hidden_fr = encoder_fr.init_hidden(batch_size, device)
+			enc_hidden_it = encoder_it.init_hidden(batch_size, device)
 
-			output_it = decoder_it(embedding_fr, hidden_it)
-			output_fr = decoder_fr(embedding_it, hidden_fr)
+			dec_hidden_fr = decoder_fr.init_hidden(batch_size, device)
+			dec_hidden_it = decoder_it.init_hidden(batch_size, device)
+
+			# computing embeddings from encoders
+			embedding_fr, enc_hidden_fr = encoder_fr(input_fr, enc_hidden_fr)
+			embedding_it, enc_hidden_it = encoder_it(input_it, enc_hidden_it)
+
+			output_it = decoder_it(embedding_fr, dec_hidden_fr)
+			output_fr = decoder_fr(embedding_it, dec_hidden_it)
 
 			# get indexes
 			output_it = output_it.argmax(dim=-1).squeeze()
 			output_fr = output_fr.argmax(dim=-1).squeeze()
 
-			output_it = get_until_eos(output_it.tolist(), vocab)
-			output_fr = get_until_eos(output_fr.tolist(), vocab)
-
-			input_it = get_until_eos(input_it.squeeze().tolist(), vocab)
-			input_fr = get_until_eos(input_fr.squeeze().tolist(), vocab)
-
-			candidate_it_corpus = [itos[int(i)] for i in output_it]
-			reference_fr_corpus = [itos[int(i)] for i in input_it]
+			candidate_it_corpus = [itos[int(i)] for i in get_until_eos(output_it.tolist(), vocab)]
+			reference_it_corpus = [itos[int(i)] for i in get_until_eos(input_it.squeeze().tolist(), vocab)]
 
 			bleu_score_it += bleu_score(candidate_corpus=[candidate_it_corpus], references_corpus=[
-				reference_fr_corpus])
+				reference_it_corpus])
 
-			candidate_fr_corpus = [itos[int(i)] for i in output_fr]
-			reference_fr_corpus = [itos[int(i)] for i in input_fr]
+			candidate_fr_corpus = [itos[int(i)] for i in get_until_eos(output_fr.tolist(), vocab)]
+			reference_fr_corpus = [itos[int(i)] for i in get_until_eos(input_fr.squeeze().tolist(), vocab)]
 
 			bleu_score_fr += bleu_score(candidate_corpus=[candidate_fr_corpus], references_corpus=[
 				reference_fr_corpus])
@@ -104,20 +101,17 @@ def generate(config, test_loader: Any, model_file: str, vocab: Vocab):
 def visualize_latent_space(config: {}, dataset: pd.DataFrame, model_file: str, plot_file: str, vocab: Vocab):
 	logger.info(f"[visualize_latent_space] {config}")
 
-	# model parameters
-	len_vocab = config['len_vocab']
+	batch_size = 1
+
+	len_vocab = len(vocab)
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
 	hidden_dim2 = config['hidden_dim2']
+
 	num_layers = config['num_layers']
 	enc_dropout = config['enc_dropout']
 	dec_dropout = config['dec_dropout']
-
-	dataset = dataset[dataset['french'].str.len() < 10].sample(n=8).reset_index(drop=True)  # sample 10 for plot
-
-	# load dataset
-	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
 
 	# model loading
 	encoder_fr = Encoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
@@ -135,13 +129,13 @@ def visualize_latent_space(config: {}, dataset: pd.DataFrame, model_file: str, p
 	decoder_fr.eval()
 	decoder_it.eval()
 
+	dataset = dataset[dataset['french'].str.len() < 15].sample(n=8).reset_index(drop=True)  # sample 8 for plot
+	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
+	loader = DataLoader(dataset, batch_size=batch_size)
+
 	points = []
 	text = []
 	colors = []
-
-	batch_size = 1
-
-	loader = DataLoader(dataset, batch_size=batch_size)
 
 	itos = vocab.get_itos()
 
@@ -150,9 +144,12 @@ def visualize_latent_space(config: {}, dataset: pd.DataFrame, model_file: str, p
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
+			enc_hidden_fr = encoder_fr.init_hidden(batch_size, device)
+			enc_hidden_it = encoder_it.init_hidden(batch_size, device)
+
 			# computing embeddings from encoders
-			embedding_fr, _ = encoder_fr(input_fr, None)
-			embedding_it, _ = encoder_it(input_it, None)
+			embedding_fr, enc_hidden_fr = encoder_fr(input_fr, enc_hidden_fr)
+			embedding_it, enc_hidden_it = encoder_it(input_it, enc_hidden_it)
 
 			points.extend(embedding_fr.cpu().detach().numpy())
 			text.append(" ".join([itos[int(i)] for i in input_fr.squeeze()[:-1]]))
