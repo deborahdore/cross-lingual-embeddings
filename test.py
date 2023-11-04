@@ -60,18 +60,15 @@ def generate(config, test_loader: Any, model_file: str, vocab: Vocab):
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
-			enc_hidden_fr = encoder_fr.init_hidden(batch_size, device)
-			enc_hidden_it = encoder_it.init_hidden(batch_size, device)
-
-			dec_hidden_fr = decoder_fr.init_hidden(batch_size, device)
-			dec_hidden_it = decoder_it.init_hidden(batch_size, device)
+			hidden_fr = encoder_fr.init_hidden(batch_size, device)
+			hidden_it = encoder_it.init_hidden(batch_size, device)
 
 			# computing embeddings from encoders
-			embedding_fr, enc_hidden_fr = encoder_fr(input_fr, enc_hidden_fr)
-			embedding_it, enc_hidden_it = encoder_it(input_it, enc_hidden_it)
+			embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+			embedding_it, hidden_it = encoder_it(input_it, hidden_it)
 
-			output_it = decoder_it(embedding_fr, dec_hidden_fr)
-			output_fr = decoder_fr(embedding_it, dec_hidden_it)
+			output_it = decoder_it(embedding_fr, hidden_it)
+			output_fr = decoder_fr(embedding_it, hidden_fr)
 
 			# get indexes
 			output_it = output_it.argmax(dim=-1).squeeze()
@@ -144,12 +141,12 @@ def visualize_latent_space(config: {}, dataset: pd.DataFrame, model_file: str, p
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
-			enc_hidden_fr = encoder_fr.init_hidden(batch_size, device)
-			enc_hidden_it = encoder_it.init_hidden(batch_size, device)
+			hidden_fr = encoder_fr.init_hidden(batch_size, device)
+			hidden_it = encoder_it.init_hidden(batch_size, device)
 
 			# computing embeddings from encoders
-			embedding_fr, enc_hidden_fr = encoder_fr(input_fr, enc_hidden_fr)
-			embedding_it, enc_hidden_it = encoder_it(input_it, enc_hidden_it)
+			embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
+			embedding_it, hidden_it = encoder_it(input_it, hidden_it)
 
 			points.extend(embedding_fr.cpu().detach().numpy())
 			text.append(" ".join([itos[int(i)] for i in input_fr.squeeze()[:-1]]))

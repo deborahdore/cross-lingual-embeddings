@@ -6,13 +6,13 @@ from typing import Any
 
 import ray
 import torch.utils.data
+import wandb
 from loguru import logger
 from ray import train
 from torch.nn import NLLLoss
 from torchtext.vocab import Vocab
 from tqdm import tqdm
 
-import wandb
 from dao.Model import Decoder, Encoder
 from test import generate
 from utils.dataset import prepare_dataset

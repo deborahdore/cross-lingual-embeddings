@@ -22,7 +22,8 @@ def prepare_dataset(corpus: pd.DataFrame, config: dict):
 	train, test = train_test_split(corpus, test_size=0.2, random_state=42)
 	train, val = train_test_split(train, test_size=0.1, random_state=42)
 
-	logger.info(f"[split_dataset] len train: {int(0.7 * len(corpus))} | len validation: {int(0.1 * len(corpus))} | len "
+	logger.info(f"[split_dataset] len train: {int(0.7 * len(corpus))} | len validation: {int(0.1 * len(corpus))} | "
+				f"len "
 				f"test: "
 				f"{int(0.2 * len(corpus))}")
 

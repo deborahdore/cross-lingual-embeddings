@@ -72,13 +72,6 @@ class Decoder(nn.Module):
 		self.max_len = 100
 		self.vocab_dim = vocab_dim
 
-	def init_hidden(self, batch_size, device):
-		bidirectional = 2 if self.bidirectional == True else 1
-		hidden = torch.randn(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
-		cell = torch.randn(self.num_layers * bidirectional, batch_size, self.hidden_dim).to(device)
-
-		return hidden, cell
-
 	def forward(self, x, hidden):
 		decoded_sentence = []
 
