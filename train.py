@@ -6,63 +6,65 @@ from typing import Any
 
 import ray
 import torch.utils.data
-import wandb
 from loguru import logger
 from ray import train
 from torch.nn import NLLLoss
 from torchtext.vocab import Vocab
 from tqdm import tqdm
 
+import wandb
 from dao.Model import Decoder, Encoder
 from test import generate
 from utils.dataset import prepare_dataset
 from utils.loss import contrastive_loss
-from utils.processing import get_until_eos
 from utils.utils import save_model, save_plot, write_json
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
-def get_an_example(encoder_fr, decoder_it, vocab, val_loader, batch_size):
+def get_an_example(encoder_it, encoder_fr, decoder_it, decoder_fr, vocab_fr, vocab_it, val_loader, batch_size):
 	with torch.no_grad():
-		itos = vocab.get_itos()
+		itos_fr = vocab_fr.get_itos()
+		itos_it = vocab_it.get_itos()
 
 		num = random.randint(0, batch_size - 1)
-
 		input_fr, input_it, label = next(iter(val_loader))
 
-		input_it = input_it[num].unsqueeze(0).to(device)
+		input_fr = input_fr.to(device)
+		input_it = input_it.to(device)
 
-		hidden_fr = encoder_fr.init_hidden(1, device)
+		input_it = input_it[num].unsqueeze(0)
+		input_fr = input_fr[num].unsqueeze(0)
 
-		embedding_fr, hidden_fr = encoder_fr(input_fr[num].unsqueeze(0).to(device), hidden_fr)
+		italian_real_phrase = " ".join([itos_it[int(i)] for i in input_it.squeeze().tolist()])
+		french_real_phrase = " ".join([itos_fr[int(i)] for i in input_fr.squeeze().tolist()])
+		logger.info(f"Input sentence (fr): {french_real_phrase}")
+		logger.info(f"Goal (it): {italian_real_phrase}")
 
-		italian_real_phrase = " ".join([itos[int(i)] for i in get_until_eos(input_it.squeeze().tolist(), vocab)])
+		embedding_fr, hidden_fr = encoder_fr(input_fr, None)
+		embedding_it, hidden_it = encoder_it(input_fr, None)
 
-		logger.info("--------------- ITALIAN with hidden_fr state: ")
+		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_fr, hidden_fr).argmax(-1).squeeze().tolist()])
+		logger.info(f"Translated sentence (fr->it) with encoder fr: {translated_italian_phrase}")
 
-		output_it = decoder_it(embedding_fr, hidden_fr)  # todo
-		output_it = output_it.argmax(dim=-1).squeeze().tolist()
+		reconstructed_french_phrase = " ".join([itos_fr[int(i)] for i in decoder_fr(embedding_fr,
+																					hidden_fr).argmax(-1).squeeze().tolist()])
+		logger.info(f"Reconstructed sentence (fr): {reconstructed_french_phrase}")
 
-		italian_fake_phrase = " ".join([itos[int(i)] for i in get_until_eos(output_it, vocab)])
+		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_it, hidden_it).argmax(-1).squeeze().tolist()])
+		logger.info(f"Translated sentence (fr->it) with encoder it: {translated_italian_phrase}")
 
-		logger.info(f"Generated: {italian_fake_phrase} \n")
-		logger.info(f"Real: {italian_real_phrase} \n")
+		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_fr, None).argmax(-1).squeeze().tolist()])
+		logger.info(f"Translated sentence (fr->it) with encoder fr and No hidden: {translated_italian_phrase}")
 
-		logger.info("--------------- ITALIAN with no hidden state: ")
-
-		output_it = decoder_it(embedding_fr, None)  # todo
-		output_it = output_it.argmax(dim=-1).squeeze().tolist()
-
-		italian_fake_phrase = " ".join([itos[int(i)] for i in get_until_eos(output_it, vocab)])
-
-		logger.info(f"Generated: {italian_fake_phrase} \n")
-		logger.info(f"Real: {italian_real_phrase} \n")
+		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_it, None).argmax(-1).squeeze().tolist()])
+		logger.info(f"Translated sentence (fr->it) with encoder it and No hidden: {translated_italian_phrase}")
 
 
 def train_autoencoder(config: dict,
 					  corpus: Any,
-					  vocab: Vocab,
+					  vocab_fr: Vocab,
+					  vocab_it: Vocab,
 					  model_file: str,
 					  plot_file: str,
 					  study_result_dir: str,
@@ -88,7 +90,8 @@ def train_autoencoder(config: dict,
 	lr = config['lr']
 
 	# model parameters
-	len_vocab = len(vocab)
+	len_vocab_fr = len(vocab_fr)
+	len_vocab_it = len(vocab_it)
 
 	embedding_dim = config['embedding_dim']
 	hidden_dim = config['hidden_dim']
@@ -101,10 +104,10 @@ def train_autoencoder(config: dict,
 	beta = config['beta']
 
 	# model instantiation
-	encoder_fr = Encoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-	encoder_it = Encoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-	decoder_fr = Decoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
-	decoder_it = Decoder(len_vocab, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
+	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
+	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
+	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
+	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
 	wandb.watch(encoder_fr)
 	wandb.watch(encoder_it)
@@ -137,29 +140,29 @@ def train_autoencoder(config: dict,
 		with tqdm(total=len(train_loader), desc=f"Epoch {epoch + 1}/{num_epochs}", unit="batch") as pbar:
 			# train each encoder-decoder on their language
 			for batch_idx, (input_fr, input_it, label) in enumerate(train_loader):
-				optimizer.zero_grad()
-
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
+				label = label.to(device)
 
 				hidden_fr = encoder_fr.init_hidden(batch_size, device)
 				hidden_it = encoder_it.init_hidden(batch_size, device)
+
+				optimizer.zero_grad()
 
 				# computing embeddings from encoders
 				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
 				embedding_it, hidden_it = encoder_it(input_it, hidden_it)
 
-				# constrastive loss with label
-				cl_loss = contrastive_loss(embedding_it, embedding_fr, label=label, device=device)
-
 				output_it = decoder_it(embedding_it, hidden_it)
 				output_fr = decoder_fr(embedding_fr, hidden_fr)
 
-				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab), input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab), input_fr.reshape(-1).long())
+				# constrastive loss with label
+				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
+
+				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab_it), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab_fr), input_fr.reshape(-1).long())
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
-
 				loss.backward()
 
 				torch.nn.utils.clip_grad_norm_(parameters, 1.0)
@@ -187,40 +190,56 @@ def train_autoencoder(config: dict,
 		decoder_it.eval()
 
 		total_val_loss = 0.0
+		total_cl_loss = 0.0
+		total_reconstruction_loss = 0.0
 
 		with torch.no_grad():
 			for (input_fr, input_it, label) in val_loader:
 				input_fr = input_fr.to(device)
 				input_it = input_it.to(device)
+				label = label.to(device)
 
 				hidden_fr = encoder_fr.init_hidden(batch_size, device)
 				hidden_it = encoder_it.init_hidden(batch_size, device)
+
+				optimizer.zero_grad()
 
 				# computing embeddings from encoders
 				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
 				embedding_it, hidden_it = encoder_it(input_it, hidden_it)
 
-				# constrastive loss with label
-				cl_loss = contrastive_loss(embedding_it, embedding_fr, label=label, device=device)
-
 				output_it = decoder_it(embedding_it, hidden_it)
 				output_fr = decoder_fr(embedding_fr, hidden_fr)
 
-				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab), input_it.reshape(-1).long())
-				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab), input_fr.reshape(-1).long())
+				# constrastive loss with label
+				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
 
+				reconstruction_loss = loss_fn(output_it.reshape(-1, len_vocab_it), input_it.reshape(-1).long())
+				reconstruction_loss += loss_fn(output_fr.reshape(-1, len_vocab_fr), input_fr.reshape(-1).long())
+
+				total_cl_loss += cl_loss
+				total_reconstruction_loss += reconstruction_loss
 				loss = cl_loss * alpha + reconstruction_loss * beta
 
 				total_val_loss += loss.item()
 
-			# display val loss
+			# display loss
 			avg_val_loss = total_val_loss / len(val_loader)
+			avg_cl_loss = total_cl_loss / len(val_loader)
+			avg_rec_loss = total_reconstruction_loss / len(val_loader)
+
 			val_losses.append(avg_val_loss)
+
 			wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
+			wandb.log({"contrastive/loss": avg_cl_loss, "epoch": epoch + 1})
+			wandb.log({"reconstruction/loss": avg_rec_loss, "epoch": epoch + 1})
+
 			logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
+			logger.info(f"[train] Contrastive Loss: {avg_cl_loss:.20f}")
+			logger.info(f"[train] Reconstruction Loss: {avg_rec_loss:.20f}")
 
 			# --------------- GET AN EXAMPLE --------------- #
-			get_an_example(encoder_fr, decoder_it, vocab, val_loader, batch_size)
+			get_an_example(encoder_it, encoder_fr, decoder_it, decoder_fr, vocab_fr, vocab_it, val_loader, batch_size)
 
 		if optimize:
 			train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})
@@ -241,11 +260,14 @@ def train_autoencoder(config: dict,
 			early_stop_counter += 1
 			if early_stop_counter >= patience:
 				logger.info(f"[train] Early stopping at epoch {epoch + 1}")
-				break
 
 	logger.info("[train] Training complete.")
 
-	bleu_score_fr, bleu_score_it = generate(config, test_loader, model_file, vocab)
+	bleu_score_fr, bleu_score_it, meteor_score_it, meteor_score_fr = generate(config,
+																			  test_loader,
+																			  model_file,
+																			  vocab_fr,
+																			  vocab_it)
 
 	if ablation_study:
 		trial_datetime = datetime.now()
@@ -260,6 +282,8 @@ def train_autoencoder(config: dict,
 		models_config.update({"loss": avg_val_loss})
 		models_config.update({"bleu_it": bleu_score_it})
 		models_config.update({"bleu_fr": bleu_score_fr})
+		models_config.update({"meteor_it": meteor_score_it})
+		models_config.update({"meteor_fr": meteor_score_fr})
 		write_json(models_config, final_abl_dir)
 
 	else:

@@ -1,7 +1,7 @@
 import torch.nn
 
 
-def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int = 1.5, device='cpu') -> torch.Tensor:
+def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: torch.Tensor, margin: int = 1.5) -> torch.Tensor:
 	"""
 	The contrastive_loss function takes in two tensors, x_i and x_j, which are the embeddings of two images. It also
 	takes in a label y (either 0 or 1) that indicates whether the images are from the same class(1) or not (0). The
@@ -16,7 +16,7 @@ def contrastive_loss(x1: torch.Tensor, x2: torch.Tensor, label: int, margin: int
 	:return: The mean of the loss for each pair
 	:param device: device
 	"""
-	label = torch.Tensor(label).unsqueeze(1).to(device)
+	label = label.unsqueeze(1)
 	dist = torch.nn.functional.pairwise_distance(x1, x2)
 	loss = label * torch.pow(dist, 2) + (1 - label) * torch.pow(torch.clamp(margin - dist, min=0.0, max=None), 2)
 	return torch.mean(loss)

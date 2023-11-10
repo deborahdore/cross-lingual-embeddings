@@ -5,6 +5,8 @@ from loguru import logger
 from sklearn.model_selection import train_test_split
 
 from config.path import (aligned_file,
+						 dataset_dir,
+						 download_corpus,
 						 eng_lang_file,
 						 lang_file,
 						 model_config_file,
@@ -14,11 +16,11 @@ from config.path import (aligned_file,
 						 study_result_dir, )
 from optimization import optimization
 from study import ablation_study
-from test import visualize_latent_space
+from test import visualize_embeddings, visualize_latent_space
 from train import train_autoencoder
 from utils.dataset import create_vocab_and_dataset
 from utils.processing import align_dataset, process_dataset
-from utils.utils import read_file, read_file_to_df, read_json
+from utils.utils import download_from_url, read_file, read_file_to_df, read_json
 
 
 def parse_command_line():
@@ -65,24 +67,33 @@ def main():
 		corpus = process_dataset(aligned_file, processed_file, plot_file)
 
 	else:
-		corpus = read_file_to_df(processed_file).sample(n=20000)
+		corpus = read_file_to_df(processed_file).sample(frac=0.5)
 
-	corpus_tokenized, vocab = create_vocab_and_dataset(corpus)
+	corpus_tokenized, vocab_fr, vocab_it = create_vocab_and_dataset(corpus)
 
-	corpus4training, corpus4testing = train_test_split(corpus_tokenized, test_size=0.1)
+	corpus4training, corpus4testing = train_test_split(corpus_tokenized, test_size=0.05)
+
 	corpus4training = corpus4training.reset_index(drop=True)
 	corpus4testing = corpus4testing.reset_index(drop=True)
 
 	if optimize_param:
 		# find optimal hyperparameters
-		optimization(corpus4training, study_result_dir, vocab)
+		optimization(corpus4training, study_result_dir, vocab_fr, vocab_it)
 	elif ablation_study_param:
-		ablation_study(corpus4training, model_config_file, vocab, model_file, plot_file, study_result_dir)
+		ablation_study(corpus4training, model_config_file, vocab_fr, vocab_it, model_file, plot_file, study_result_dir)
 	else:
 		# normal training
 		config = read_json(model_config_file)
-		train_autoencoder(config, corpus4training, vocab, model_file, plot_file, study_result_dir, optimize=False)
-		visualize_latent_space(config, corpus4testing, model_file, plot_file, vocab)
+		train_autoencoder(config,
+						  corpus4training,
+						  vocab_fr,
+						  vocab_it,
+						  model_file,
+						  plot_file,
+						  study_result_dir,
+						  optimize=False)
+		visualize_latent_space(config, corpus4testing, model_file, plot_file, vocab_fr, vocab_it)
+		visualize_embeddings(config, corpus4testing, model_file, plot_file, vocab_fr, vocab_it)
 
 
 if __name__ == '__main__':
