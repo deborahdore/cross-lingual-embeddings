@@ -13,10 +13,11 @@ from torchtext.vocab import Vocab
 from tqdm import tqdm
 
 import wandb
-from dao.Model import Decoder, Encoder
+from dao.Model import Decoder, Encoder, SharedSpace
 from test import generate
 from utils.dataset import prepare_dataset
 from utils.loss import contrastive_loss
+from utils.processing import get_until_eos
 from utils.utils import save_model, save_plot, write_json
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -36,29 +37,26 @@ def get_an_example(encoder_it, encoder_fr, decoder_it, decoder_fr, vocab_fr, voc
 		input_it = input_it[num].unsqueeze(0)
 		input_fr = input_fr[num].unsqueeze(0)
 
-		italian_real_phrase = " ".join([itos_it[int(i)] for i in input_it.squeeze().tolist()])
-		french_real_phrase = " ".join([itos_fr[int(i)] for i in input_fr.squeeze().tolist()])
+		italian_real_phrase = " ".join([itos_it[int(i)] for i in get_until_eos(input_it.squeeze().tolist(), vocab_it)])
+		french_real_phrase = " ".join([itos_fr[int(i)] for i in get_until_eos(input_fr.squeeze().tolist(), vocab_fr)])
+
 		logger.info(f"Input sentence (fr): {french_real_phrase}")
 		logger.info(f"Goal (it): {italian_real_phrase}")
 
-		embedding_fr, hidden_fr = encoder_fr(input_fr, None)
-		embedding_it, hidden_it = encoder_it(input_fr, None)
+		embedding_fr, hidden_fr = encoder_fr(input_fr)
+		embedding_it, hidden_it = encoder_it(input_fr)
 
-		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_fr, hidden_fr).argmax(-1).squeeze().tolist()])
-		logger.info(f"Translated sentence (fr->it) with encoder fr: {translated_italian_phrase}")
-
-		reconstructed_french_phrase = " ".join([itos_fr[int(i)] for i in decoder_fr(embedding_fr,
-																					hidden_fr).argmax(-1).squeeze().tolist()])
+		reconstructed_french_phrase = " ".join([itos_fr[int(i)] for i in
+												decoder_fr(embedding_fr, hidden_fr).argmax(-1).squeeze().tolist()])
 		logger.info(f"Reconstructed sentence (fr): {reconstructed_french_phrase}")
 
-		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_it, hidden_it).argmax(-1).squeeze().tolist()])
+		translated_italian_phrase = " ".join([itos_it[int(i)] for i in
+											  decoder_it(embedding_fr, hidden_fr).argmax(-1).squeeze().tolist()])
+		logger.info(f"Translated sentence (fr->it) with encoder fr: {translated_italian_phrase}")
+
+		translated_italian_phrase = " ".join([itos_it[int(i)] for i in
+											  decoder_it(embedding_it, hidden_it).argmax(-1).squeeze().tolist()])
 		logger.info(f"Translated sentence (fr->it) with encoder it: {translated_italian_phrase}")
-
-		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_fr, None).argmax(-1).squeeze().tolist()])
-		logger.info(f"Translated sentence (fr->it) with encoder fr and No hidden: {translated_italian_phrase}")
-
-		translated_italian_phrase = " ".join([itos_it[int(i)] for i in decoder_it(embedding_it, None).argmax(-1).squeeze().tolist()])
-		logger.info(f"Translated sentence (fr->it) with encoder it and No hidden: {translated_italian_phrase}")
 
 
 def train_autoencoder(config: dict,
@@ -104,8 +102,23 @@ def train_autoencoder(config: dict,
 	beta = config['beta']
 
 	# model instantiation
-	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
+	shared_space = SharedSpace(hidden_dim, hidden_dim2).to(device)
+
+	encoder_fr = Encoder(len_vocab_fr,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
+	encoder_it = Encoder(len_vocab_it,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
+
 	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
@@ -113,12 +126,13 @@ def train_autoencoder(config: dict,
 	wandb.watch(encoder_it)
 	wandb.watch(decoder_it)
 	wandb.watch(decoder_fr)
+	wandb.watch(shared_space)
 
-	# optimizer + scheduler
-	parameters = list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(decoder_it.parameters()) + list(
+	params = list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(decoder_it.parameters()) + list(
 		decoder_fr.parameters())
-	optimizer = torch.optim.AdamW(params=parameters, lr=lr)
-	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
+
+	optimizer = torch.optim.AdamW(params=params, lr=lr)
+	# scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
 
 	train_losses = []
 	val_losses = []
@@ -134,6 +148,7 @@ def train_autoencoder(config: dict,
 		encoder_it.train()
 		decoder_fr.train()
 		decoder_it.train()
+		shared_space.train()
 
 		total_train_loss = 0.0
 
@@ -144,17 +159,14 @@ def train_autoencoder(config: dict,
 				input_it = input_it.to(device)
 				label = label.to(device)
 
-				hidden_fr = encoder_fr.init_hidden(batch_size, device)
-				hidden_it = encoder_it.init_hidden(batch_size, device)
-
 				optimizer.zero_grad()
 
 				# computing embeddings from encoders
-				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-				embedding_it, hidden_it = encoder_it(input_it, hidden_it)
+				embedding_fr, hidden_fr = encoder_fr(input_fr)
+				embedding_it, hidden_it = encoder_it(input_it)
 
-				output_it = decoder_it(embedding_it, hidden_it)
 				output_fr = decoder_fr(embedding_fr, hidden_fr)
+				output_it = decoder_it(embedding_it, hidden_it)
 
 				# constrastive loss with label
 				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
@@ -164,21 +176,16 @@ def train_autoencoder(config: dict,
 
 				loss = cl_loss * alpha + reconstruction_loss * beta
 				loss.backward()
-
-				torch.nn.utils.clip_grad_norm_(parameters, 1.0)
-
 				optimizer.step()
 
 				total_train_loss += loss.item()
 
-				pbar.set_postfix({"Train Loss": loss.item()})
+				pbar.set_postfix({"Train Loss": loss.item(), "C-Loss": cl_loss.item()})
 				pbar.update(1)
 
-		# scheduler's step
 		learning_rates.append(optimizer.param_groups[0]["lr"])
-		scheduler.step()
+		# scheduler.step()
 
-		# save avg train loss
 		avg_train_loss = total_train_loss / len(train_loader)
 		train_losses.append(avg_train_loss)
 		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
@@ -188,6 +195,7 @@ def train_autoencoder(config: dict,
 		encoder_it.eval()
 		decoder_fr.eval()
 		decoder_it.eval()
+		shared_space.eval()
 
 		total_val_loss = 0.0
 		total_cl_loss = 0.0
@@ -199,17 +207,14 @@ def train_autoencoder(config: dict,
 				input_it = input_it.to(device)
 				label = label.to(device)
 
-				hidden_fr = encoder_fr.init_hidden(batch_size, device)
-				hidden_it = encoder_it.init_hidden(batch_size, device)
-
 				optimizer.zero_grad()
 
 				# computing embeddings from encoders
-				embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-				embedding_it, hidden_it = encoder_it(input_it, hidden_it)
+				embedding_fr, hidden_fr = encoder_fr(input_fr)
+				embedding_it, hidden_it = encoder_it(input_it)
 
-				output_it = decoder_it(embedding_it, hidden_it)
 				output_fr = decoder_fr(embedding_fr, hidden_fr)
+				output_it = decoder_it(embedding_it, hidden_it)
 
 				# constrastive loss with label
 				cl_loss = contrastive_loss(embedding_fr, embedding_it, label=label)
@@ -223,7 +228,6 @@ def train_autoencoder(config: dict,
 
 				total_val_loss += loss.item()
 
-			# display loss
 			avg_val_loss = total_val_loss / len(val_loader)
 			avg_cl_loss = total_cl_loss / len(val_loader)
 			avg_rec_loss = total_reconstruction_loss / len(val_loader)
@@ -255,11 +259,13 @@ def train_autoencoder(config: dict,
 			save_model(decoder_fr, file=model_file.format(type="decoder_fr"))
 			save_model(encoder_it, file=model_file.format(type="encoder_it"))
 			save_model(decoder_it, file=model_file.format(type="decoder_it"))
+			save_model(shared_space, file=model_file.format(type="shared_space"))
 
 		else:
 			early_stop_counter += 1
 			if early_stop_counter >= patience:
 				logger.info(f"[train] Early stopping at epoch {epoch + 1}")
+				break
 
 	logger.info("[train] Training complete.")
 

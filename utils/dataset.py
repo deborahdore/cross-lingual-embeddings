@@ -1,6 +1,5 @@
 import pandas as pd
 import spacy
-import torch
 import torchtext
 from loguru import logger
 from sklearn.model_selection import train_test_split

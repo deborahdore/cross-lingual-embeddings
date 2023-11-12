@@ -12,7 +12,7 @@ from torchtext.data import bleu_score
 from torchtext.vocab import Vocab
 
 from dao.Dataset import LSTMDataset
-from dao.Model import Decoder, Encoder
+from dao.Model import Decoder, Encoder, SharedSpace
 from utils.processing import get_until_eos
 from utils.utils import load_model
 
@@ -37,8 +37,23 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 	dec_dropout = config['dec_dropout']
 
 	# model loading
-	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
+	shared_space = SharedSpace(hidden_dim, hidden_dim2).to(device)
+	shared_space.load_state_dict(load_model(model_file.format(type='shared_space')))
+
+	encoder_fr = Encoder(len_vocab_fr,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
+	encoder_it = Encoder(len_vocab_it,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
 	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
@@ -51,6 +66,7 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 	encoder_it.eval()
 	decoder_fr.eval()
 	decoder_it.eval()
+	shared_space.eval()
 
 	bleu_score_it = 0
 	bleu_score_fr = 0
@@ -65,12 +81,9 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
-			hidden_fr = encoder_fr.init_hidden(batch_size, device)
-			hidden_it = encoder_it.init_hidden(batch_size, device)
-
 			# computing embeddings from encoders
-			embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-			embedding_it, hidden_it = encoder_it(input_it, hidden_it)
+			embedding_fr, hidden_fr = encoder_fr(input_fr)
+			embedding_it, hidden_it = encoder_it(input_it)
 
 			output_it = decoder_it(embedding_fr, hidden_fr)
 			output_fr = decoder_fr(embedding_it, hidden_it)  # swap
@@ -124,8 +137,23 @@ def visualize_embeddings(config: {},
 	dec_dropout = config['dec_dropout']
 
 	# model loading
-	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
+	shared_space = SharedSpace(hidden_dim, hidden_dim2).to(device)
+	shared_space.load_state_dict(load_model(model_file.format(type='shared_space')))
+
+	encoder_fr = Encoder(len_vocab_fr,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
+	encoder_it = Encoder(len_vocab_it,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
 	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
@@ -138,6 +166,7 @@ def visualize_embeddings(config: {},
 	encoder_it.eval()
 	decoder_fr.eval()
 	decoder_it.eval()
+	shared_space.eval()
 
 	dataset = dataset.sample(n=8).reset_index(drop=True)  # sample 8 for plot
 	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
@@ -155,18 +184,15 @@ def visualize_embeddings(config: {},
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
 
-			hidden_fr = encoder_fr.init_hidden(batch_size, device)
-			hidden_it = encoder_it.init_hidden(batch_size, device)
-
 			# computing embeddings from encoders
-			embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-			embedding_it, hidden_it = encoder_it(input_it, hidden_it)
+			embedding_fr, hidden_fr = encoder_fr(input_fr)
+			embedding_it, hidden_it = encoder_it(input_it)
 
 			points.append(embedding_fr.squeeze().cpu().detach().numpy())
-			text.append(" ".join([itos_fr[int(i)] for i in input_fr.squeeze()[:-1]]))
+			text.append(" ".join([itos_fr[int(i)] for i in get_until_eos(input_fr.squeeze().tolist(), vocab_fr)]))
 
 			points.append(embedding_it.squeeze().cpu().detach().numpy())
-			text.append(" ".join([itos_it[int(i)] for i in input_it.squeeze()[:-1]]))
+			text.append(" ".join([itos_it[int(i)] for i in get_until_eos(input_it.squeeze().tolist(), vocab_it)]))
 
 			colors.extend([i] * 2)
 
@@ -210,8 +236,23 @@ def visualize_latent_space(config: {},
 	dec_dropout = config['dec_dropout']
 
 	# model loading
-	encoder_fr = Encoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
-	encoder_it = Encoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, enc_dropout).to(device)
+	shared_space = SharedSpace(hidden_dim, hidden_dim2).to(device)
+	shared_space.load_state_dict(load_model(model_file.format(type='shared_space')))
+
+	encoder_fr = Encoder(len_vocab_fr,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
+	encoder_it = Encoder(len_vocab_it,
+						 embedding_dim,
+						 hidden_dim,
+						 hidden_dim2,
+						 num_layers,
+						 enc_dropout,
+						 shared_space).to(device)
 	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
@@ -224,6 +265,7 @@ def visualize_latent_space(config: {},
 	encoder_it.eval()
 	decoder_fr.eval()
 	decoder_it.eval()
+	shared_space.eval()
 
 	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
 	loader = DataLoader(dataset, batch_size=batch_size)
@@ -231,17 +273,14 @@ def visualize_latent_space(config: {},
 	points_fr = []
 	points_it = []
 
-	hidden_fr = encoder_fr.init_hidden(batch_size, device)
-	hidden_it = encoder_it.init_hidden(batch_size, device)
-
 	with torch.no_grad():
-		for i, (input_fr, input_it, _) in enumerate(loader):
+		for i, (input_fr, input_it, label) in enumerate(loader):
 			input_fr = input_fr.to(device)
 			input_it = input_it.to(device)
-
+			assert label.item() == 1
 			# computing embeddings from encoders
-			embedding_fr, hidden_fr = encoder_fr(input_fr, hidden_fr)
-			embedding_it, hidden_it = encoder_it(input_it, hidden_it)
+			embedding_fr, hidden_fr = encoder_fr(input_fr)
+			embedding_it, hidden_it = encoder_it(input_it)
 
 			points_fr.append(embedding_fr.squeeze().cpu().detach().numpy())
 			points_it.append(embedding_it.squeeze().cpu().detach().numpy())

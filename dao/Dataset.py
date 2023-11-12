@@ -14,10 +14,10 @@ class LSTMDataset(Dataset):
 	def __getitem__(self, index):
 		sample_fr = torch.tensor(self.french[index])
 
-		if self.negative_sampling and random.random() < 0.5:
-			new_index = random.randint(0, len(self.italian) - 1)
+		if self.negative_sampling and index % 2 == 0:  # random.uniform(0, 1) < 0.5:
+			index = random.randint(0, len(self.italian) - 1)
 			# Negative
-			return sample_fr, torch.tensor(self.italian[new_index]), torch.tensor(0)
+			return sample_fr, torch.tensor(self.italian[index]), torch.tensor(0)
 
 		# Positive
 		else:

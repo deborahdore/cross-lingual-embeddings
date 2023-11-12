@@ -50,9 +50,8 @@ def main():
 
 	if generate_param:
 
-		# download_from_url(download_corpus.format(lang="it"), dataset_dir, "it")
-		# download_from_url(download_corpus.format(lang="de"), dataset_dir, "de")
-		# download_from_url(download_corpus.format(lang="fr"), dataset_dir, "fr")
+		download_from_url(download_corpus.format(lang="it"), dataset_dir, "it")
+		download_from_url(download_corpus.format(lang="fr"), dataset_dir, "fr")
 
 		it_file = read_file(lang_file.format(lang="it"))
 		eng_it_file = read_file(eng_lang_file.format(lang="it"))

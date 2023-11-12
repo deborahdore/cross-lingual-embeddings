@@ -1,13 +1,15 @@
+import os.path
+
 import pandas as pd
 import torchtext
 from loguru import logger
 from torchtext.vocab import Vocab
 
-from config.path import eng_lang_file, lang_file
+from config.path import dataset_dir, download_corpus, eng_lang_file, lang_file
 from train import train_autoencoder
 from utils.dataset import sequence2index
 from utils.processing import nlp_pipeline
-from utils.utils import read_file, read_json
+from utils.utils import download_from_url, read_file, read_json
 
 
 def ablation_study(corpus_4_model_training: pd.DataFrame(),
@@ -78,13 +80,11 @@ def ablation_study(corpus_4_model_training: pd.DataFrame(),
 
 	# ------- test on english/german dataset ------- #
 	logger.info("[ablation_study_eval] training with english/german")
-	# test_english_german(config, model_file, plot_file, study_result_dir)
+	test_english_german(config, model_file, plot_file, study_result_dir)
 
 	# ------- test on english/french dataset ------- #
 	logger.info("[ablation_study_eval] training with english/french")
-
-
-# test_english_french(config, model_file, plot_file, study_result_dir)
+	test_english_french(config, model_file, plot_file, study_result_dir)
 
 
 def test_english_french(config, model_file, plot_file, study_result_dir):
@@ -113,25 +113,30 @@ def test_english_french(config, model_file, plot_file, study_result_dir):
 	vocab_en.insert_token('<unk>', 2)
 	vocab_en.set_default_index(vocab_en['<unk>'])
 
-	corpus_tokenized = pd.DataFrame({
-		'french' : sequence2index(tokenized_dataset_fr.apply(lambda x: x + ["<eos>"]), vocab_fr),
-		'english': sequence2index(tokenized_dataset_en.apply(lambda x: x + ["<eos>"]), vocab_en)})
+	tokenized_dataset_en = tokenized_dataset_en.apply(lambda x: x + ["<eos>"])
+	tokenized_dataset_fr = tokenized_dataset_fr.apply(lambda x: x + ["<eos>"])
 
-	corpus_tokenized = corpus_tokenized.dropna().drop_duplicates().reset_index(drop=True)
+	corpus_tokenized = pd.DataFrame({
+		'english': sequence2index(tokenized_dataset_en, vocab_en),
+		'french' : sequence2index(tokenized_dataset_fr, vocab_fr)})
+
+	corpus_tokenized = corpus_tokenized[
+		corpus_tokenized.apply(lambda row: len(row['french']) <= 100 and len(row['english']) <= 100 and len(
+			row['french']) > 10 and len(row['english']) > 10, axis=1)]
+
+	corpus_tokenized['french'] = corpus_tokenized['french'].apply(lambda x: x[:100] + [0] * (100 - len(x)))
+	corpus_tokenized['english'] = corpus_tokenized['english'].apply(lambda x: x[:100] + [0] * (100 - len(x)))
 
 	config_en_fr = config
-	train_autoencoder(config_en_fr,
-					  corpus_tokenized,
-					  vocab_fr,
-					  vocab_en,
-					  model_file,
-					  plot_file,
-					  study_result_dir,
-					  optimize=False,
-					  ablation_study=True)
+	train_autoencoder(config_en_fr, corpus_tokenized, vocab_fr,  # vocab fr
+					  vocab_en,  # vocab it
+					  model_file, plot_file, study_result_dir, optimize=False, ablation_study=True)
 
 
 def test_english_german(config, model_file, plot_file, study_result_dir):
+	if not os.path.exists(download_corpus.format(lang="de")):
+		download_from_url(download_corpus.format(lang="de"), dataset_dir, "de")
+
 	de_file = read_file(lang_file.format(lang="de"))
 	eng_de_file = read_file(eng_lang_file.format(lang="de"))
 
@@ -146,31 +151,33 @@ def test_english_german(config, model_file, plot_file, study_result_dir):
 	tokenized_dataset_de = corpus['german'].apply(lambda x: tokenizer_de(x))
 	tokenized_dataset_en = corpus['english'].apply(lambda x: tokenizer_en(x))
 
-	vocab_de = torchtext.vocab.build_vocab_from_iterator(tokenized_dataset_de, max_tokens=40000)
+	vocab_de = torchtext.vocab.build_vocab_from_iterator(tokenized_dataset_de, max_tokens=30000)
 	vocab_de.insert_token('<pad>', 0)
 	vocab_de.insert_token('<eos>', 1)
 	vocab_de.insert_token('<unk>', 2)
 	vocab_de.set_default_index(vocab_de['<unk>'])
-	vocab_en = torchtext.vocab.build_vocab_from_iterator(tokenized_dataset_en, max_tokens=40000)
+
+	vocab_en = torchtext.vocab.build_vocab_from_iterator(tokenized_dataset_en, max_tokens=30000)
 	vocab_en.insert_token('<pad>', 0)
 	vocab_en.insert_token('<eos>', 1)
 	vocab_en.insert_token('<unk>', 2)
 	vocab_en.set_default_index(vocab_en['<unk>'])
 
-	corpus_tokenized = pd.DataFrame({
-		'german' : sequence2index(tokenized_dataset_de.apply(lambda x: x + ["<eos>"]), vocab_de),
-		'english': sequence2index(tokenized_dataset_en.apply(lambda x: x + ["<eos>"]), vocab_en)})
+	tokenized_dataset_en = tokenized_dataset_en.apply(lambda x: x + ["<eos>"])
+	tokenized_dataset_de = tokenized_dataset_de.apply(lambda x: x + ["<eos>"])
 
-	corpus_tokenized = corpus_tokenized.dropna().drop_duplicates().reset_index(drop=True)
+	corpus_tokenized = pd.DataFrame({
+		'english': sequence2index(tokenized_dataset_en, vocab_en),
+		'german' : sequence2index(tokenized_dataset_de, vocab_de)})
+
+	corpus_tokenized = corpus_tokenized[
+		corpus_tokenized.apply(lambda row: len(row['german']) <= 100 and len(row['english']) <= 100 and len(
+			row['german']) > 10 and len(row['english']) > 10, axis=1)]
+
+	corpus_tokenized['german'] = corpus_tokenized['german'].apply(lambda x: x[:100] + [0] * (100 - len(x)))
+	corpus_tokenized['english'] = corpus_tokenized['english'].apply(lambda x: x[:100] + [0] * (100 - len(x)))
 
 	config_en_de = config
-
-	train_autoencoder(config_en_de,
-					  corpus_tokenized,
-					  vocab_de,
-					  vocab_en,
-					  model_file,
-					  plot_file,
-					  study_result_dir,
-					  optimize=False,
-					  ablation_study=True)
+	train_autoencoder(config_en_de, corpus_tokenized, vocab_de,  # vocab fr
+					  vocab_en,  # vocab it
+					  model_file, plot_file, study_result_dir, optimize=False, ablation_study=True)

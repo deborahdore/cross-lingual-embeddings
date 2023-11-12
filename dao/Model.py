@@ -3,6 +3,16 @@ import torch.nn.functional as F
 from torch import nn
 
 
+class SharedSpace(nn.Module):
+	def __init__(self, hidden_dim: int, hidden_dim2: int, max_len: int = 100):
+		super(SharedSpace, self).__init__()
+		self.fc = nn.Linear(max_len * (hidden_dim * 2), hidden_dim2)
+
+	def forward(self, x):
+		x = self.fc(x.reshape(x.size(0), -1))
+		return F.leaky_relu(x)
+
+
 class Encoder(nn.Module):
 	def __init__(self,
 				 vocab_dim: int,
@@ -11,18 +21,18 @@ class Encoder(nn.Module):
 				 hidden_dim2: int,
 				 num_layers: int = 1,
 				 dropout: float = 0.0,
-				 bidirectional: bool = True,
-				 max_len: int = 100):
+				 shared_space=nn.Module,
+				 bidirectional: bool = True):
 		super(Encoder, self).__init__()
 
 		self.embedder = nn.Embedding(num_embeddings=vocab_dim, embedding_dim=embedding_dim, padding_idx=0)
 		self.encoder = nn.LSTM(embedding_dim,
 							   hidden_dim,
+							   dropout=dropout,
 							   num_layers=num_layers,
 							   bidirectional=bidirectional,
 							   batch_first=True)
-		self.fc = nn.Linear(max_len * (hidden_dim * 2), hidden_dim2)
-
+		self.shared_space = shared_space
 		self.num_layers = num_layers
 		self.hidden_dim = hidden_dim
 		self.bidirectional = bidirectional
@@ -33,13 +43,6 @@ class Encoder(nn.Module):
 		cell = torch.zeros(self.num_layers * bidirectional, batch_size, self.hidden_dim, device=device)
 
 		return hidden, cell
-
-	def forward(self, x, hidden):
-		embedded = self.embedder(x)
-		outputs, hidden = self.encoder(embedded, hidden)
-		outputs = self.fc(outputs.reshape(x.size(0), -1))
-		outputs = F.leaky_relu(outputs)
-		return outputs, hidden
 
 	def extract_last_hidden(self, hidden, batch_size):
 		bidirectional = 2 if self.bidirectional == True else 1
@@ -54,6 +57,12 @@ class Encoder(nn.Module):
 
 		return final_hidden_state
 
+	def forward(self, x):
+		embedded = self.embedder(x)
+		outputs, hidden = self.encoder(embedded)
+		outputs = self.shared_space(outputs)
+		return outputs, hidden
+
 
 class Decoder(nn.Module):
 	def __init__(self,
@@ -67,10 +76,9 @@ class Decoder(nn.Module):
 				 max_len: int = 100):
 		super(Decoder, self).__init__()
 
-		# self.noise = nn.Dropout(p=dropout)
-		# self.embedding = nn.Embedding(vocab_dim, embedding_dim)
 		self.decoder = nn.LSTM(hidden_dim2,
 							   hidden_dim,
+							   dropout=dropout,
 							   num_layers=num_layers,
 							   bidirectional=bidirectional,
 							   batch_first=True)

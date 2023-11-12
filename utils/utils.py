@@ -9,7 +9,7 @@ import torch
 from loguru import logger
 from matplotlib import pyplot as plt
 
-from dao.Model import Decoder, Encoder
+from dao.Model import Decoder, Encoder, SharedSpace
 
 
 def read_json(json_file_name: str) -> json:
@@ -59,7 +59,7 @@ def download_from_url(url: str, to_save: str, lang: str) -> None:
 	logger.info(f"[download_from_url] file saved to {to_save}")
 
 
-def save_model(model: Union[Encoder, Decoder], file: str) -> None:
+def save_model(model: Union[Encoder, Decoder, SharedSpace], file: str) -> None:
 	torch.save(model.state_dict(), file)
 
 
