@@ -13,6 +13,7 @@ from torch.nn import NLLLoss
 from torchtext.vocab import Vocab
 from tqdm import tqdm
 
+from config.path import base_dir
 from dao.Model import Decoder, Encoder, SharedSpace
 from test import generate
 from utils.dataset import prepare_dataset
@@ -72,7 +73,9 @@ def train_autoencoder(config: dict,
 		corpus = ray.get(corpus)
 
 	# init weight&biases feature
-	wandb.init(project="cross-lingual-embeddings", config=config)
+	# name of the run
+	name = base_dir.split("/")[-1] + datetime.now()
+	wandb.init(project="cross-lingual-embeddings", name=name, config=config)
 
 	train_loader, val_loader, test_loader = prepare_dataset(corpus, config)
 
@@ -132,7 +135,7 @@ def train_autoencoder(config: dict,
 		decoder_fr.parameters())
 
 	optimizer = torch.optim.AdamW(params=params, lr=lr)
-	# scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
+	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
 
 	train_losses = []
 	val_losses = []
@@ -184,7 +187,7 @@ def train_autoencoder(config: dict,
 				pbar.update(1)
 
 		learning_rates.append(optimizer.param_groups[0]["lr"])
-		# scheduler.step()
+		scheduler.step()
 
 		avg_train_loss = total_train_loss / len(train_loader)
 		train_losses.append(avg_train_loss)

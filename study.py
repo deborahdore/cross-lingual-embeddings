@@ -1,6 +1,7 @@
 import os.path
 
 import pandas as pd
+import spacy
 import torchtext
 from loguru import logger
 from torchtext.vocab import Vocab
@@ -10,6 +11,9 @@ from train import train_autoencoder
 from utils.dataset import sequence2index
 from utils.processing import nlp_pipeline
 from utils.utils import download_from_url, read_file, read_json
+
+spacy.load('de_core_news_sm')
+spacy.load('en_core_web_sm')
 
 
 def ablation_study(corpus_4_model_training: pd.DataFrame(),

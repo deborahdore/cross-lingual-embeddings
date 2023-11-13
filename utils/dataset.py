@@ -11,10 +11,6 @@ from dao.Dataset import LSTMDataset
 spacy.load('fr_core_news_sm')
 spacy.load('it_core_news_sm')
 
-
-# spacy.load('de_core_news_sm')
-# spacy.load('en_core_web_sm')
-
 def prepare_dataset(corpus: pd.DataFrame, config: dict):
 	logger.info("[prepare_dataset] preparing dataset")
 	# modify configuration
