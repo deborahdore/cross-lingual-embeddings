@@ -3,6 +3,7 @@
 _The goal of this project is to create embeddings for italian and french that are aligned in a shared latent space using
 an encoder-decoder model_
 
+[Weight&Biases Report](https://api.wandb.ai/links/admaiora/kunimg18)
 ## **REPLICABILITY**
 
 Each experiment was conducted on a single machine by running the [main](main.py) script and specifying whether to

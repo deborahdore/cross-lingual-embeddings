@@ -27,8 +27,8 @@ def optimization(corpus: pd.DataFrame, study_result_dir: str, vocab_fr: Vocab, v
 		"num_layers"   : tune.choice([1, 2, 3]),
 		"enc_dropout"  : tune.loguniform(0.1, 0.3),
 		"dec_dropout"  : tune.loguniform(0.1, 0.3),
-		"alpha"        : tune.loguniform(0.5, 1),
-		"beta"         : tune.loguniform(0.5, 1)}
+		"alpha"        : tune.loguniform(1, 1.5),
+		"beta"         : tune.loguniform(1, 1.5)}
 
 	# scheduler to minimize loss
 	scheduler = ASHAScheduler(metric="loss", mode="min", max_t=25, grace_period=1, reduction_factor=2)
@@ -45,10 +45,11 @@ def optimization(corpus: pd.DataFrame, study_result_dir: str, vocab_fr: Vocab, v
 								  study_result_dir=study_result_dir,
 								  optimize=True),
 						  config=config,
-						  num_samples=2,
+						  num_samples=8,
+						  resources_per_trial={"gpu": 1},
 						  scheduler=scheduler,
 						  local_dir=model_dir,
-						  verbose=0)
+						  verbose=2)
 
 		best_trial = result.get_best_trial("loss", "min", "last")
 		logger.info(f"Best trial config: {best_trial.config}")

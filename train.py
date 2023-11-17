@@ -13,13 +13,12 @@ from torch.nn import NLLLoss
 from torchtext.vocab import Vocab
 from tqdm import tqdm
 
-from config.path import base_dir
 from dao.Model import Decoder, Encoder, SharedSpace
 from test import generate
 from utils.dataset import prepare_dataset
 from utils.loss import contrastive_loss
 from utils.processing import get_until_eos
-from utils.utils import save_model, save_plot, write_json
+from utils.utils import save_model, write_json
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -72,18 +71,17 @@ def train_autoencoder(config: dict,
 	if optimize:
 		corpus = ray.get(corpus)
 
+	logger.info(f"[train_autoencoder] OPTIMIZE: {optimize}")
+	logger.info(f"[train_autoencoder] ABLATION STUDY: {ablation_study}")
+	logger.info(f"[train_autoencoder] DEVICE: {device}")
+
 	# init weight&biases feature
-	# name of the run
-	name = base_dir.split("/")[-1] + datetime.now()
-	wandb.init(project="cross-lingual-embeddings", name=name, config=config)
+	wandb.init(project=f"cross-lingual-embeddings", config=config)
 
 	train_loader, val_loader, test_loader = prepare_dataset(corpus, config)
 
-	logger.info(f"[train] device: {device}")
-
 	# training parameters
 	batch_size = config['batch_size']
-
 	patience = config['patience']
 	early_stop_counter = 0
 	best_val_loss = float('inf')
@@ -106,7 +104,6 @@ def train_autoencoder(config: dict,
 
 	# model instantiation
 	shared_space = SharedSpace(hidden_dim, hidden_dim2).to(device)
-
 	encoder_fr = Encoder(len_vocab_fr,
 						 embedding_dim,
 						 hidden_dim,
@@ -121,25 +118,13 @@ def train_autoencoder(config: dict,
 						 num_layers,
 						 enc_dropout,
 						 shared_space).to(device)
-
 	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
 
-	wandb.watch(encoder_fr)
-	wandb.watch(encoder_it)
-	wandb.watch(decoder_it)
-	wandb.watch(decoder_fr)
-	wandb.watch(shared_space)
-
+	# optimizers
 	params = list(encoder_it.parameters()) + list(encoder_fr.parameters()) + list(decoder_it.parameters()) + list(
 		decoder_fr.parameters())
-
 	optimizer = torch.optim.AdamW(params=params, lr=lr)
-	scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
-
-	train_losses = []
-	val_losses = []
-	learning_rates = []
 
 	avg_val_loss = 0.0
 
@@ -186,13 +171,8 @@ def train_autoencoder(config: dict,
 				pbar.set_postfix({"Train Loss": loss.item(), "C-Loss": cl_loss.item()})
 				pbar.update(1)
 
-		learning_rates.append(optimizer.param_groups[0]["lr"])
-		scheduler.step()
-
 		avg_train_loss = total_train_loss / len(train_loader)
-		train_losses.append(avg_train_loss)
 		logger.info(f"[train] Epoch [{epoch + 1}/{num_epochs}], Average Train Loss: {avg_train_loss:.20f}")
-		wandb.log({"train/loss": avg_train_loss, "epoch": epoch + 1})
 
 		encoder_fr.eval()
 		encoder_it.eval()
@@ -235,18 +215,20 @@ def train_autoencoder(config: dict,
 			avg_cl_loss = total_cl_loss / len(val_loader)
 			avg_rec_loss = total_reconstruction_loss / len(val_loader)
 
-			val_losses.append(avg_val_loss)
-
-			wandb.log({"val/loss": avg_val_loss, "epoch": epoch + 1})
-			wandb.log({"contrastive/loss": avg_cl_loss, "epoch": epoch + 1})
-			wandb.log({"reconstruction/loss": avg_rec_loss, "epoch": epoch + 1})
-
-			logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
-			logger.info(f"[train] Contrastive Loss: {avg_cl_loss:.20f}")
-			logger.info(f"[train] Reconstruction Loss: {avg_rec_loss:.20f}")
-
 			# --------------- GET AN EXAMPLE --------------- #
 			get_an_example(encoder_it, encoder_fr, decoder_it, decoder_fr, vocab_fr, vocab_it, val_loader, batch_size)
+
+		# WANDB PLOTS
+		wandb.log({"loss/train": avg_train_loss, "epoch": epoch})
+		wandb.log({"lr/train": optimizer.param_groups[0]["lr"], "epoch": epoch})
+		wandb.log({"loss/val": avg_val_loss, "epoch": epoch})
+		wandb.log({"loss/contrastive": avg_cl_loss, "epoch": epoch})
+		wandb.log({"loss/reconstruction": avg_rec_loss, "epoch": epoch})
+
+		logger.info(f"[train] Validation Loss: {avg_val_loss:.20f}")
+		logger.info(f"[train] Contrastive Loss: {avg_cl_loss:.20f}")
+		logger.info(f"[train] Reconstruction Loss: {avg_rec_loss:.20f}")
+
 
 		if optimize:
 			train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})
@@ -277,14 +259,17 @@ def train_autoencoder(config: dict,
 																			  model_file,
 																			  vocab_fr,
 																			  vocab_it)
+	wandb.run.summary["bleu_score_fr"] = bleu_score_fr
+	wandb.run.summary["bleu_score_it"] = bleu_score_it
+	wandb.run.summary["meteor_score_it"] = meteor_score_it
+	wandb.run.summary["meteor_score_fr"] = meteor_score_fr
+
+	logger.info(wandb.run.summary)
 
 	if ablation_study:
 		trial_datetime = datetime.now()
 		final_abl_dir = os.path.join(study_result_dir, str(trial_datetime))
 		Path(final_abl_dir).mkdir(parents=True, exist_ok=True)
-
-		train_vs_val_loss_file = os.path.join(final_abl_dir, "train_vs_val_loss.svg")
-		lr_epochs_file = os.path.join(final_abl_dir, "learning_rate.svg")
 
 		# save status + loss
 		models_config = {str(trial_datetime): config}
@@ -294,20 +279,5 @@ def train_autoencoder(config: dict,
 		models_config.update({"meteor_it": meteor_score_it})
 		models_config.update({"meteor_fr": meteor_score_fr})
 		write_json(models_config, final_abl_dir)
-
-	else:
-		train_vs_val_loss_file = plot_file.format(file_name="train_vs_val_loss")
-		lr_epochs_file = plot_file.format(file_name="learning_rate")
-
-	# save losses
-	plt_elems = [("train loss", train_losses), ("validation loss", val_losses)]
-	save_plot(plt_elems, "epochs", "losses", "train vs val loss", train_vs_val_loss_file)
-
-	# save learning rates
-	save_plot([("learning rates", learning_rates)],
-			  "epochs",
-			  "learning rates",
-			  "learning rates through epochs",
-			  lr_epochs_file)
 
 	wandb.finish()
