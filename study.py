@@ -30,6 +30,7 @@ def ablation_study(corpus_4_model_training: pd.DataFrame(),
 	config_without_dropout = config
 	config_without_dropout['enc_dropout'] = 0
 	config_without_dropout['dec_dropout'] = 0
+	study_result_dir = os.path.join(study_result_dir, "dropout")
 	train_autoencoder(config_without_dropout,
 					  corpus_4_model_training,
 					  vocab_fr,
@@ -44,6 +45,7 @@ def ablation_study(corpus_4_model_training: pd.DataFrame(),
 	logger.info("[ablation_study_eval] training with just one layer of lstm")
 	config_one_layer = config
 	config_one_layer['num_layers'] = 1
+	study_result_dir = os.path.join(study_result_dir, "num_layers")
 	train_autoencoder(config_one_layer,
 					  corpus_4_model_training,
 					  vocab_fr,
@@ -58,6 +60,7 @@ def ablation_study(corpus_4_model_training: pd.DataFrame(),
 	logger.info("[ablation_study_eval] training without contrastive loss")
 	config_zero_alpha = config
 	config_zero_alpha['alpha'] = 0
+	study_result_dir = os.path.join(study_result_dir, "cl_loss")
 	train_autoencoder(config_zero_alpha,
 					  corpus_4_model_training,
 					  vocab_fr,
@@ -72,6 +75,7 @@ def ablation_study(corpus_4_model_training: pd.DataFrame(),
 	logger.info("[ablation_study_eval] training without reconstruction loss")
 	config_zero_beta = config
 	config_zero_beta['beta'] = 0
+	study_result_dir = os.path.join(study_result_dir, "reconstruction_loss")
 	train_autoencoder(config_zero_beta,
 					  corpus_4_model_training,
 					  vocab_fr,
@@ -84,10 +88,12 @@ def ablation_study(corpus_4_model_training: pd.DataFrame(),
 
 	# ------- test on english/german dataset ------- #
 	logger.info("[ablation_study_eval] training with english/german")
+	study_result_dir = os.path.join(study_result_dir, "english_german")
 	test_english_german(config, model_file, plot_file, study_result_dir)
 
 	# ------- test on english/french dataset ------- #
 	logger.info("[ablation_study_eval] training with english/french")
+	study_result_dir = os.path.join(study_result_dir, "english_french")
 	test_english_french(config, model_file, plot_file, study_result_dir)
 
 

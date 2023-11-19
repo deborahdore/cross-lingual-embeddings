@@ -45,7 +45,7 @@ def optimization(corpus: pd.DataFrame, study_result_dir: str, vocab_fr: Vocab, v
 								  study_result_dir=study_result_dir,
 								  optimize=True),
 						  config=config,
-						  num_samples=8,
+						  num_samples=2,
 						  resources_per_trial={"gpu": 1},
 						  scheduler=scheduler,
 						  local_dir=model_dir,

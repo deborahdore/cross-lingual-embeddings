@@ -107,6 +107,9 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 	bleu_score_it = bleu_score_it / len(test_loader)
 	bleu_score_fr = bleu_score_fr / len(test_loader)
 
+	meteor_score_it = meteor_score_it / len(test_loader)
+	meteor_score_fr = meteor_score_fr / len(test_loader)
+
 	logger.info(f"[generate] Bleu score italian corpus {bleu_score_it}")
 	logger.info(f"[generate] Bleu score french corpus {bleu_score_fr}")
 	logger.info(f"[generate] Meteor score italian corpus {meteor_score_it}")

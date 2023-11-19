@@ -268,8 +268,7 @@ def train_autoencoder(config: dict,
 
 	if ablation_study:
 		trial_datetime = datetime.now()
-		final_abl_dir = os.path.join(study_result_dir, str(trial_datetime))
-		Path(final_abl_dir).mkdir(parents=True, exist_ok=True)
+		Path(study_result_dir).mkdir(parents=True, exist_ok=True)
 
 		# save status + loss
 		models_config = {str(trial_datetime): config}
@@ -278,6 +277,6 @@ def train_autoencoder(config: dict,
 		models_config.update({"bleu_fr": bleu_score_fr})
 		models_config.update({"meteor_it": meteor_score_it})
 		models_config.update({"meteor_fr": meteor_score_fr})
-		write_json(models_config, final_abl_dir)
+		write_json(models_config, os.path.join(study_result_dir, "results.json") )
 
 	wandb.finish()
