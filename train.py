@@ -24,6 +24,20 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 
 
 def get_an_example(encoder_it, encoder_fr, decoder_it, decoder_fr, vocab_fr, vocab_it, val_loader, batch_size):
+	"""
+	The get_an_example function is used to get a random example from the validation set and print it.
+	It also prints the reconstructed sentence, as well as two translations of that sentence: one using
+	the french encoder and one using the italian encoder. This function is useful for debugging purposes.
+
+	:param encoder_it: encoder model for italian
+	:param encoder_fr:  encoder model for french
+	:param decoder_it:  decoder model for italian
+	:param decoder_fr:  decoder model for french
+	:param vocab_fr: Get the itos (index to string) of the french vocabulary
+	:param vocab_it: Get the itos (index to string) of the italian vocabulary
+	:param val_loader: The validation set
+	:param batch_size: Size of the batch
+	"""
 	with torch.no_grad():
 		itos_fr = vocab_fr.get_itos()
 		itos_it = vocab_it.get_itos()
@@ -68,6 +82,19 @@ def train_autoencoder(config: dict,
 					  study_result_dir: str,
 					  optimize: bool = False,
 					  ablation_study: bool = False):
+	"""
+	The train_autoencoder function trains the autoencoder model.
+
+	:param config: dict: The hyperparameters of the model
+	:param corpus: Any: The corpus
+	:param vocab_fr: Vocab: Pass the vocabulary of french
+	:param vocab_it: Vocab: Pass the vocabulary of italian
+	:param model_file: str: Save the model
+	:param plot_file: str: Save the plot of the loss
+	:param study_result_dir: str: Save the results of the ablation study
+	:param optimize: bool: Indicate whether we are running the function in an optimization setting
+	:param ablation_study: bool: Indicate whether we are running the function in an ablation setting
+	"""
 	if optimize:
 		corpus = ray.get(corpus)
 
@@ -229,7 +256,6 @@ def train_autoencoder(config: dict,
 		logger.info(f"[train] Contrastive Loss: {avg_cl_loss:.20f}")
 		logger.info(f"[train] Reconstruction Loss: {avg_rec_loss:.20f}")
 
-
 		if optimize:
 			train.report({'loss': avg_val_loss, 'train/loss': avg_train_loss})
 
@@ -259,6 +285,12 @@ def train_autoencoder(config: dict,
 																			  model_file,
 																			  vocab_fr,
 																			  vocab_it)
+	logger.info(f"meteor it {meteor_score_it}")
+	logger.info(f"meteor fr {meteor_score_fr}")
+
+	logger.info(f"bleu it {bleu_score_it}")
+	logger.info(f"bleu fr {bleu_score_fr}")
+
 	wandb.run.summary["bleu_score_fr"] = bleu_score_fr
 	wandb.run.summary["bleu_score_it"] = bleu_score_it
 	wandb.run.summary["meteor_score_it"] = meteor_score_it
@@ -277,6 +309,6 @@ def train_autoencoder(config: dict,
 		models_config.update({"bleu_fr": bleu_score_fr})
 		models_config.update({"meteor_it": meteor_score_it})
 		models_config.update({"meteor_fr": meteor_score_fr})
-		write_json(models_config, os.path.join(study_result_dir, "results.json") )
+		write_json(models_config, os.path.join(study_result_dir, "results.json"))
 
 	wandb.finish()

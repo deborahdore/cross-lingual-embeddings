@@ -11,7 +11,18 @@ from dao.Dataset import LSTMDataset
 spacy.load('fr_core_news_sm')
 spacy.load('it_core_news_sm')
 
+
 def prepare_dataset(corpus: pd.DataFrame, config: dict):
+	"""
+	The prepare_dataset function takes a pandas dataframe and a configuration dictionary as input.
+	It splits the corpus into train, validation and test sets. It then creates three DataLoader objects:
+	one for training, one for validation and one for testing. The DataLoaders are used to create batches of
+	data that can be fed into the model during training/validation/testing.
+
+	:param corpus: pd.DataFrame: Pass the dataframe containing the corpus to be used for training
+	:param config: dict: Pass the configuration to the function
+	:return: A tuple of 3 dataloaders: train, val, test
+	"""
 	logger.info("[prepare_dataset] preparing dataset")
 	# modify configuration
 
@@ -47,6 +58,14 @@ def prepare_dataset(corpus: pd.DataFrame, config: dict):
 
 
 def sequence2index(corpus: pd.DataFrame, vocab: Vocab):
+	"""
+	The sequence2index function takes a corpus of sentences and a vocabulary as input.
+	It returns the encoded version of the corpus, where each word is replaced by its index in the vocabulary.
+
+	:param corpus: pd.DataFrame: Pass in the corpus, which is a list of lists
+	:param vocab: Vocab: Get the index of a word in the vocabulary
+	:return: A list of lists, where each sublist is a sequence of integers
+	"""
 	encoded = []
 	for sentence in corpus:
 		encoded.append([vocab[token] for token in sentence])
@@ -55,6 +74,16 @@ def sequence2index(corpus: pd.DataFrame, vocab: Vocab):
 
 def create_vocab_and_dataset(corpus: pd.DataFrame):
 	# generating vocab from text file
+	"""
+	The create_vocab_and_dataset function takes a pandas dataframe as input and returns a tokenized dataset,
+	a French vocabulary and an Italian vocabulary. The function first creates two tokenizers for the French and
+	Italian languages using spaCy. It then uses these to create two vocabularies from the corpus, one for each language.
+	The function then adds special tokens  <pad>, <eos> and <unk> to both vocabularies before setting their default index
+	to be that of the unknown word token (i.e., 2). Finally, it appends an end-of-sentence tag <eos>
+
+	:param corpus: pd.DataFrame: Pass the dataframe to the function
+	:return: A tokenized dataset and two vocabularies
+	"""
 	logger.info("[create_vocab] creating vocabulary")
 	tokenizer_fr = torchtext.data.utils.get_tokenizer('spacy', language="fr_core_news_sm")
 	tokenizer_it = torchtext.data.utils.get_tokenizer('spacy', language="it_core_news_sm")

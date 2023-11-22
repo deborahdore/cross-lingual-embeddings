@@ -23,6 +23,18 @@ def ablation_study(corpus_4_model_training: pd.DataFrame(),
 				   model_file: str,
 				   plot_file: str,
 				   study_result_dir: str):
+	"""
+	The ablation_study function is used to test the effect of different model configurations on the performance of
+	the autoencoder.
+
+	:param corpus_4_model_training: pd.DataFrame(): Pass in the training data
+	:param model_config_file: str: Read the model configuration file
+	:param vocab_fr: Vocab: Pass the vocabulary of the french language
+	:param vocab_it: Vocab: Pass the vocabulary of the italian language
+	:param model_file: str: Save the model
+	:param plot_file: str: Save the plot of the loss function
+	:param study_result_dir: str: Save the results of the ablation study
+	"""
 	config = read_json(model_config_file)
 
 	# ------- train without dropout ------- #

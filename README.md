@@ -3,7 +3,8 @@
 _The goal of this project is to create embeddings for italian and french that are aligned in a shared latent space using
 an encoder-decoder model_
 
-[Weight&Biases Report](https://api.wandb.ai/links/admaiora/kunimg18)
+[Weights&Biases Report](https://api.wandb.ai/links/admaiora/6hb75yvs)
+
 ## **REPLICABILITY**
 
 Each experiment was conducted on a single machine by running the [main](main.py) script and specifying whether to
@@ -87,8 +88,4 @@ decoders learn to reconstruct the original sequence starting from the embeddings
 ## **LATENT SPACE PROJECTION**
 
 <img src="plot/latent_space_projection.svg">
-
-## **EMBEDDINGS PROJECTION**
-
-<img src="plot/embeddings_projection.svg">
 

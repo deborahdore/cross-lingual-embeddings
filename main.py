@@ -16,7 +16,7 @@ from config.path import (aligned_file,
 						 study_result_dir, )
 from optimization import optimization
 from study import ablation_study
-from test import visualize_embeddings, visualize_latent_space
+from test import visualize_latent_space
 from train import train_autoencoder
 from utils.dataset import create_vocab_and_dataset
 from utils.processing import align_dataset, process_dataset
@@ -24,6 +24,14 @@ from utils.utils import download_from_url, read_file, read_file_to_df, read_json
 
 
 def parse_command_line():
+	"""
+	The parse_command_line function parses the command line arguments and returns three boolean values:
+		generate - whether or not to generate a new dataset
+		optimize - whether or not to optimize the model parameters using Bayesian optimization
+		ablation - whether or not to perform an ablation study on the model
+
+	:return: A tuple of three boolean values
+	"""
 	generate = False
 	optimize = False
 	ablation = False
@@ -42,6 +50,9 @@ def parse_command_line():
 
 
 def main():
+	"""
+	The main function of the script.
+	"""
 	if len(sys.argv) < 5:
 		logger.error("[main] missing arguments from command line")
 		raise Exception("missing arguments from command line")
@@ -66,7 +77,7 @@ def main():
 		corpus = process_dataset(aligned_file, processed_file, plot_file)
 
 	else:
-		corpus = read_file_to_df(processed_file).sample(frac=0.5)
+		corpus = read_file_to_df(processed_file).sample(frac=0.05)
 
 	corpus_tokenized, vocab_fr, vocab_it = create_vocab_and_dataset(corpus)
 
@@ -79,6 +90,7 @@ def main():
 		# find optimal hyperparameters
 		optimization(corpus4training, study_result_dir, vocab_fr, vocab_it)
 	elif ablation_study_param:
+		# run ablation study
 		ablation_study(corpus4training, model_config_file, vocab_fr, vocab_it, model_file, plot_file, study_result_dir)
 	else:
 		# normal training
@@ -92,7 +104,6 @@ def main():
 						  study_result_dir,
 						  optimize=False)
 		visualize_latent_space(config, corpus4testing, model_file, plot_file, vocab_fr, vocab_it)
-		visualize_embeddings(config, corpus4testing, model_file, plot_file, vocab_fr, vocab_it)
 
 
 if __name__ == '__main__':

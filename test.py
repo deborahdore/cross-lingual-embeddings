@@ -19,7 +19,33 @@ from utils.utils import load_model
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
+def remove_padding(row):
+	"""
+	The remove_padding function takes a row of numbers and removes all the zeros from it.
+
+	:param row: Specify the row that is being passed in to be cleaned
+	:return: A list of all the non-zero elements in a row
+	"""
+	return [x for x in row if x != 0]
+
+
 def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_it: Vocab):
+	"""
+	The generate function takes as input a configuration dictionary, a test loader, the path to the model file and two
+	vocabularies.
+	It loads the model from disk and evaluates it on all of the data in test_loader. It returns four values:
+	- bleu score for french corpus (float)
+	- bleu score for italian corpus (float)
+	- meteor score for french corpus (float)
+	- meteor score for italian corpus (float)
+
+	:param config: Pass the configuration parameters from the train
+	:param test_loader: Any: Load the test data
+	:param model_file: str: Load the model
+	:param vocab_fr: Vocab: Get the itos (index to string) of the french vocabulary
+	:param vocab_it: Vocab: Get the itos of the vocabulary
+	:return: The bleu score for italian and french corpus, as well as the meteor score
+	"""
 	logger.info(f"[generate] device: {device}")
 
 	# model parameters
@@ -118,111 +144,29 @@ def generate(config, test_loader: Any, model_file: str, vocab_fr: Vocab, vocab_i
 	return bleu_score_fr, bleu_score_it, meteor_score_it, meteor_score_fr
 
 
-def visualize_embeddings(config: {},
-						 dataset: pd.DataFrame,
-						 model_file: str,
-						 plot_file: str,
-						 vocab_fr: Vocab,
-						 vocab_it: Vocab):
-	logger.info(f"[visualize_embeddings] {config}")
-
-	batch_size = 1
-
-	len_vocab_fr = len(vocab_fr)
-	len_vocab_it = len(vocab_it)
-
-	embedding_dim = config['embedding_dim']
-	hidden_dim = config['hidden_dim']
-	hidden_dim2 = config['hidden_dim2']
-
-	num_layers = config['num_layers']
-	enc_dropout = config['enc_dropout']
-	dec_dropout = config['dec_dropout']
-
-	# model loading
-	shared_space = SharedSpace(hidden_dim, hidden_dim2).to(device)
-	shared_space.load_state_dict(load_model(model_file.format(type='shared_space')))
-
-	encoder_fr = Encoder(len_vocab_fr,
-						 embedding_dim,
-						 hidden_dim,
-						 hidden_dim2,
-						 num_layers,
-						 enc_dropout,
-						 shared_space).to(device)
-	encoder_it = Encoder(len_vocab_it,
-						 embedding_dim,
-						 hidden_dim,
-						 hidden_dim2,
-						 num_layers,
-						 enc_dropout,
-						 shared_space).to(device)
-	decoder_fr = Decoder(len_vocab_fr, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
-	decoder_it = Decoder(len_vocab_it, embedding_dim, hidden_dim, hidden_dim2, num_layers, dec_dropout).to(device)
-
-	encoder_fr.load_state_dict(load_model(model_file.format(type='encoder_fr')))
-	encoder_it.load_state_dict(load_model(model_file.format(type='encoder_it')))
-	decoder_fr.load_state_dict(load_model(model_file.format(type='decoder_fr')))
-	decoder_it.load_state_dict(load_model(model_file.format(type='decoder_it')))
-
-	encoder_fr.eval()
-	encoder_it.eval()
-	decoder_fr.eval()
-	decoder_it.eval()
-	shared_space.eval()
-
-	dataset = dataset.sample(n=8).reset_index(drop=True)  # sample 8 for plot
-	dataset = LSTMDataset(corpus_fr=dataset['french'], corpus_it=dataset['italian'], negative_sampling=False)
-	loader = DataLoader(dataset, batch_size=batch_size)
-
-	points = []
-	text = []
-	colors = []
-
-	itos_fr = vocab_fr.get_itos()
-	itos_it = vocab_it.get_itos()
-
-	with torch.no_grad():
-		for i, (input_fr, input_it, _) in enumerate(loader):
-			input_fr = input_fr.to(device)
-			input_it = input_it.to(device)
-
-			# computing embeddings from encoders
-			embedding_fr, hidden_fr = encoder_fr(input_fr)
-			embedding_it, hidden_it = encoder_it(input_it)
-
-			points.append(embedding_fr.squeeze().cpu().detach().numpy())
-			text.append(" ".join([itos_fr[int(i)] for i in get_until_eos(input_fr.squeeze().tolist(), vocab_fr)]))
-
-			points.append(embedding_it.squeeze().cpu().detach().numpy())
-			text.append(" ".join([itos_it[int(i)] for i in get_until_eos(input_it.squeeze().tolist(), vocab_it)]))
-
-			colors.extend([i] * 2)
-
-	points = np.array(points)
-	pca = PCA(n_components=2, svd_solver='full')
-	new_points = pca.fit_transform(points)
-
-	plt.figure(figsize=(10, 10))
-	plt.scatter(new_points[:, 0], new_points[:, 1], s=20.0, c=colors, cmap='tab10', alpha=0.9)
-
-	for i, label in enumerate(text):
-		plt.text(new_points[i, 0], new_points[i, 1], label, fontsize=8, ha='center', va='bottom')
-
-	plt.title('Embeddings Projection')
-	plt.xlabel("X")
-	plt.ylabel("Y")
-	plt.tight_layout()
-	plt.savefig(plot_file.format(file_name="embeddings_projection"))
-	plt.close()
-
-
 def visualize_latent_space(config: {},
 						   dataset: pd.DataFrame,
 						   model_file: str,
 						   plot_file: str,
 						   vocab_fr: Vocab,
 						   vocab_it: Vocab):
+	"""
+	The visualize_latent_space function takes in a config dictionary, dataset dataframe, model file name,
+	plot file name and the vocabularies for French and Italian.
+	It then loads the models from the model files into their respective encoders/decoders. It then iterates through
+	each sentence pair in our dataset to get its embedding vectors using
+	the encoder_fr and encoder_it models. These embeddings are stored as points_fr (for French) and points_it (for
+	Italian). The PCA function is used to reduce these dimensions down
+	to 2 so that we can visualize them on a scatter
+
+	:param config: {}: Pass the configuration of the model
+	:param dataset: pd.DataFrame: Pass the dataframe containing the parallel sentences
+	:param model_file: str: Load the model
+	:param plot_file: str: Specify the path to the file where you want to save your plot
+	:param vocab_fr: Vocab: Pass the french vocabulary to the function
+	:param vocab_it: Vocab: Pass the vocabulary for italian
+	:return: A scatter plot of the latent space
+	"""
 	logger.info(f"[visualize_latent_space] {config}")
 
 	batch_size = 1

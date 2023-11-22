@@ -13,6 +13,21 @@ from utils.utils import write_json
 
 
 def optimization(corpus: pd.DataFrame, study_result_dir: str, vocab_fr: Vocab, vocab_it: Vocab):
+	"""
+	The optimization function is used to find the best hyperparameters for our model.
+	It uses Ray Tune, a library that allows us to run multiple experiments in parallel.
+	The function takes as input the corpus of data we want to train on, and two vocabularies (one for each language).
+	It then creates a configuration dictionary with all possible combinations of hyperparameters we want to try out.
+	We use this config dictionary when calling tune.run(). This function will create 25 different models using random
+	combinations from our config dict and train them in parallel on GPUs (if available). We also specify an
+	ASHAScheduler
+
+	:param corpus: pd.DataFrame: Pass the corpus to the function
+	:param study_result_dir: str: Store the results of the optimization in a folder
+	:param vocab_fr: Vocab: Pass the vocabulary of the french corpus to train_model
+	:param vocab_it: Vocab: Pass the vocabulary of the italian language to the function
+	:return: A dictionary of the best parameters
+	"""
 	logger.info("[optimization] starting optimization")
 
 	# create configuration to try out
@@ -45,11 +60,11 @@ def optimization(corpus: pd.DataFrame, study_result_dir: str, vocab_fr: Vocab, v
 								  study_result_dir=study_result_dir,
 								  optimize=True),
 						  config=config,
-						  num_samples=2,
+						  num_samples=25,
 						  resources_per_trial={"gpu": 1},
 						  scheduler=scheduler,
 						  local_dir=model_dir,
-						  verbose=2)
+						  verbose=0)
 
 		best_trial = result.get_best_trial("loss", "min", "last")
 		logger.info(f"Best trial config: {best_trial.config}")
