@@ -1,7 +1,11 @@
-# cross-lingual-embeddings
+<div align="center">
+  
+# Cross Lingual Embeddings
 
-_The goal of this project is to create embeddings for italian and french that are aligned in a shared latent space using
-an encoder-decoder model_
+The goal of this project is to create embeddings for italian and french that are aligned in a shared latent space using
+an encoder-decoder model
+
+</div>
 
 ## **REPLICABILITY**
 
